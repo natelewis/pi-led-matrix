@@ -5,9 +5,11 @@
 
 import sys
 import cv2
+import time
 from PIL import Image
 from os.path import exists
-from config import framebuffer, pixel_height, pixel_width, framerate
+from config import enhance_image, framebuffer, pixel_height, pixel_width, framerate
+
 
 usage = "Usage: sudo video.py video-file.png"
 if len(sys.argv) != 2:
@@ -35,13 +37,15 @@ def getFrame(sec):
         r, g, b = rgb_image.split()
         rgb_image = Image.merge('RGB', (b, g, r))
 
+        # fix the color a bit
+        enhanced_image = enhance_image(rgb_image);
+
         # display frame
-        framebuf.image(rgb_image)
+        framebuf.image(enhanced_image)
         framebuf.display()
     return hasFrames
 
 while True:
-
     sec = 0
     count = 1
     success = getFrame(sec)

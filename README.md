@@ -13,9 +13,9 @@ Shopping List:
 * Raspberry Pi 4
 * Extra 3 pin wire @ 22AWG
 * Extra JST SM 3 Pin Connectors for extension to where your panel is from the Pi/PSU
-* A bit of patience -- Takes about 4-5 hours to put it all together
 * Curtain rod
 * Hobby wood/bamboo @ 3/8" wide to stick on the back of the LED strips to keep them straight
+* A bit of patience -- Takes about 4-5 hours to put it all together
 
 In this example I built a 60x30 array with 5V 300W 60A power supply:
 
@@ -59,7 +59,7 @@ sudo python3 -m pip install --force-reinstall adafruit-blinka
 
 ## Test hardware
 
-Running the test script will cycle between R..., G..., B...
+Running the test script will cycle between R..., G..., B... (repeat)
 
 ```bash
 sudo python3 test.py
