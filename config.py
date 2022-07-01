@@ -20,7 +20,7 @@ def pixels():
     return neopixel.NeoPixel(
         pixel_pin,
         pixel_width * pixel_height,
-        brightness=brightness
+        brightness=brightness,
         auto_write=False,
     )
 

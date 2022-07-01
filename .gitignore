@@ -1,3 +1,5 @@
 __pycache__
 *.mp4
 *.png
+._*
+.DS_Store

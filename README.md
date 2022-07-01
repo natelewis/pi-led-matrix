@@ -37,6 +37,7 @@ _   _   _   _ ...
 
 ### Pi setup
 1. Install RPi OS 32 bit
+2. Get your Pi on your network, running headless and pull down this repo
 2. Execute the following to globally install libraries and dependicies:
 ```
 sudo apt update
