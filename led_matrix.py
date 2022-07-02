@@ -5,10 +5,8 @@ from config import (
     brightness,
     contrast_factor,
     color_factor,
-    framerate,
 )
 import cv2
-import types
 import numpy as np
 
 # config and mapping for virtual env vs pi with LED matrix
@@ -23,16 +21,16 @@ try:
 except ImportError:
     # virtual env
     VIRTUAL_ENV = True
-    board = {}
 
 pixel_pin = board.D18 if not VIRTUAL_ENV else 0
 pixel_width = pixel_width
 pixel_height = pixel_height
-framerate = framerate
-
 
 def delay(ms):
     cv2.waitKey(ms)
+
+def fill(r, g, b):
+    return np.full([pixel_height, pixel_width, 3],[b, g, r], np.uint8)
 
 def enhance(image):
     rgb_image = Image.fromarray(image, mode="RGB")
@@ -50,7 +48,7 @@ class VirtualPixelFramebuffer():
     def image(self, img):
         self.frame = np.array(img)
 
-    def display(self):
+    def show(self):
         cv2.imshow('preview', self.frame)
 
         # this is the magic sauce -- waitKey runs all the cv2 handlers behind the scene
@@ -58,14 +56,13 @@ class VirtualPixelFramebuffer():
         cv2.waitKey(100)
 
     def fill(self, r, g, b):
-        # rgb -> bgr
-        self.frame = np.full([pixel_height, pixel_width, 3],[b, g, r], np.uint8)
+        self.frame = fill(r, g, b)
 
     def delay(self, ms):
         delay(ms)
 
-    def enhance(self, img):
-        enhance(self.frame, img)
+    def enhance(self):
+        self.frame = enhance(self.frame)
 
     def line(self, start, end, color, width):
         cv2.line(self.frame, start, end, color, width)
@@ -89,10 +86,10 @@ class LiveMatrix():
             pixel_height,
             orientation=VERTICAL
         )
-        
-        
+
+
     def fill(self, r, g, b):
-        self.frame = np.full([pixel_height, pixel_width, 3],[b, g, r], np.uint8)
+        self.frame = fill(r, g, b)
 
     def image(self, img):
         self.frame = np.array(img)
@@ -110,8 +107,6 @@ class LiveMatrix():
         img = Image.fromarray(self.frame, mode="RGB")
         self.buff.image(img)
         self.buff.display()
-    
-
 
 def Matrix():
     if not VIRTUAL_ENV:

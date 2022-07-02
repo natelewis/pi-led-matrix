@@ -2,8 +2,9 @@ import sys
 import cv2
 from PIL import Image
 from os.path import exists
-from led_matrix import Matrix, pixel_height, pixel_width, framerate
+from led_matrix import Matrix, pixel_height, pixel_width
 
+framerate = 0.3 # in seconds
 
 usage = "Usage: sudo video.py video-file.png"
 if len(sys.argv) != 2:
@@ -20,7 +21,7 @@ matrix = Matrix();
 vidcap = cv2.VideoCapture(video_file)
 
 def getFrame(sec):
-    vidcap.set(cv2.CAP_PROP_POS_MSEC,sec*1000)
+    vidcap.set(cv2.CAP_PROP_POS_MSEC,sec * 1000)
     hasFrames,image = vidcap.read()
     if hasFrames:
         # convert data array to rgb image
@@ -33,12 +34,11 @@ def getFrame(sec):
 
         # display frame
         matrix.image(rgb_image)
-        
-        # fix the color a bit
-        matrix.enhance();
 
-
+        # fix the color a bit and show
+        matrix.enhance()
         matrix.show()
+
     return hasFrames
 
 while True:
