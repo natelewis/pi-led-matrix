@@ -39,8 +39,15 @@ _   _   _   _ ...
 4. Hang the LED strips to the curtain rod with your adhesive of choice
 5. Stick the wood to the back of the strips
 
-## Pi setup
+## Virtual Env setup
+You can emulate the LED array locally.  It detects you do not have any of the adafruit modules installed and fails over to virtual mode.  Currently limited to animations only, your event loop must be < 100ms
 
+```bash
+pip3 install opencv-python
+pip3 install -U numpy
+```
+
+## Raspberry Pi setup
 1. Install RPi OS 32 bit
 2. Get your Pi on your network, running headless and pull down this repo
 3. Execute the following to globally install libraries and dependencies:
@@ -53,6 +60,9 @@ wget https://raw.githubusercontent.com/adafruit/Raspberry-Pi-Installer-Scripts/m
 sudo python3 raspi-blinka.py
 sudo pip3 install rpi_ws281x adafruit-circuitpython-neopixel
 sudo python3 -m pip install --force-reinstall adafruit-blinka
+sudo pip3 install opencv-python
+sudo pip3 install -U numpy
+sudo apt-get install libatlas-base-dev
 ```
 
 1. Update the `config.py` to adjust sizes, delays, and pin configuration.

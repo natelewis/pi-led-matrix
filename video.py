@@ -1,11 +1,5 @@
-# -- pi requirements:
-# sudo pip3 install opencv-python
-# sudo pip3 install -U numpy
-# sudo apt-get install libatlas-base-dev
-
 import sys
 import cv2
-import time
 from PIL import Image
 from os.path import exists
 from config import enhance_image, framebuffer, pixel_height, pixel_width, framerate

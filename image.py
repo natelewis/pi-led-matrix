@@ -1,7 +1,7 @@
 import sys
 from PIL import Image
 from os.path import exists
-from config import framebuffer, enhance_image, pixel_height, pixel_width
+from config import framebuffer, enhance_image, pixel_height, pixel_width, delay
 
 usage = "Usage: sudo image.py image-name.png"
 if len(sys.argv) != 2:
@@ -30,3 +30,6 @@ enhanced_image = enhance_image(image)
 framebuf = framebuffer()
 framebuf.image(enhanced_image.convert("RGB"))
 framebuf.display()
+
+# in virtual env this lets the image hang out for 5 seconds
+delay(5000)
