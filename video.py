@@ -2,7 +2,7 @@ import sys
 import cv2
 from PIL import Image
 from os.path import exists
-from config import enhance_image, framebuffer, pixel_height, pixel_width, framerate
+from led_matrix import enhance_image, framebuffer, pixel_height, pixel_width, framerate
 
 
 usage = "Usage: sudo video.py video-file.png"

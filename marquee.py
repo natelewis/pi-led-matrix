@@ -1,11 +1,12 @@
-import board
-import neopixel
-import time
-from adafruit_pixel_framebuf import PixelFramebuffer, VERTICAL
-
+# Not currently compatible with virtual env yet
 import sys
-from os.path import exists
-from config import framebuffer, pixel_height, pixel_width, delay, top_padding, font_size
+import time
+from led_matrix import framebuffer
+
+# marquee
+delay = 0.0 # in seconds
+font_size = 1
+top_padding = 4
 
 usage = 'Usage: sudo image.py "my message"'
 if len(sys.argv) != 2:

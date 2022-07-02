@@ -1,7 +1,7 @@
 import sys
 from PIL import Image
 from os.path import exists
-from config import framebuffer, enhance_image, pixel_height, pixel_width, delay
+from led_matrix import framebuffer, enhance_image, pixel_height, pixel_width, delay
 
 usage = "Usage: sudo image.py image-name.png"
 if len(sys.argv) != 2:

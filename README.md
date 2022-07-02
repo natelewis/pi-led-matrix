@@ -99,6 +99,8 @@ sudo python3 image.py image.png
 
 ## Scrolling Marquee
 
+This only works in live -- not currently compatible with virtual env
+
 ```bash
 sudo python3 marquee.py 'Message Here'
 ```
