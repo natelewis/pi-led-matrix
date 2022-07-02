@@ -106,18 +106,66 @@ This only works in live -- not currently compatible with virtual env
 sudo python3 marquee.py 'Message Here'
 ```
 
-## API
+# API`
 
-The API consist of [cv2 drawing functions](https://docs.opencv.org/4.x/dc/da5/tutorial_py_drawing_functions.html) and a few extras that mimic some helpful function in the adafruit libraries.
+```python
+from led_matrix import
+    framebuffer,
+    delay
+framebuffer.fill(0,0,0) # black background
+delay(1000)
+```
 
-### led_matrix.fill(r, g, b):
+`framebuffer.fill(r, g, b)`:
+
+---
+
 Fill all the pixels with the r/g/b values given.
 
 ```python
-fill(0, 0, 0) # turn off all LEDs
-fill(255, 0 , 0) # all LEDs red
+framebuffer.fill(0, 0, 0) # turn off all LEDs
+framebuffer.fill(255, 0 , 0) # all LEDs red
 ```
 
+<br/>
+
+`framebuffer.delay(ms)`:
+
+---
+
+Sleep x amount of milliseconds
+
+```python
+framebuffer.delay(1000) # 1 second
+framebuffer.delay(1000 * 60) # 1 minute
+```
+
+<br/>
+
+`framebuffer.fill(r, g, b)`:
+
+---
+
+Fill all the pixels with the r/g/b values given.
+
+```python
+framebuffer.fill(0, 0, 0) # turn off all LEDs
+framebuffer.fill(255, 0 , 0) # all LEDs red
+```
+
+<br/>
+
+`framebuffer.line((x,y), (x,y), (r, g, b), width)`:
+
+---
+
+Fill all the pixels with the r/g/b values given.
+
+```python
+framebuffer.line((0, 0), (60, 30), (255, 0, 0),  1) # diagonal red line
+```
+
+<br/>
 ## Contributing
 
 Checkout [CONTRIBUTING.md](CONTRIBUTING.md)

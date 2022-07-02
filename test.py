@@ -7,12 +7,12 @@ framebuf = framebuffer()
 while True:
     framebuf.fill(255, 0, 0)
     framebuf.display()
-    delay(1000)
+    framebuf.delay(1000)
 
     framebuf.fill(0, 255, 0)
     framebuf.display()
-    delay(1000)
+    framebuf.delay(1000)
 
     framebuf.fill(0, 0, 255)
     framebuf.display()
-    delay(1000)
+    framebuf.delay(1000)

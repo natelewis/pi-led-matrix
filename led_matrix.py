@@ -30,10 +30,21 @@ pixel_width = pixel_width
 pixel_height = pixel_height
 framerate = framerate
 
+
+def delay(ms):
+    cv2.waitKey(ms)
+
+def enhance(image):
+    color_enhance = ImageEnhance.Color(image)
+    colored_image = color_enhance.enhance(color_factor)
+    contrast_enhancer = ImageEnhance.Contrast(colored_image)
+    return contrast_enhancer.enhance(contrast_factor)
+
 class VirtualPixelFramebuffer():
     def __init__(self):
         self.frame = 0
         self.current_rendering = False
+        self.image = self.fill(0, 0, 0)
 
     def image(self, img):
         self.current_rendering = False
@@ -48,11 +59,16 @@ class VirtualPixelFramebuffer():
 
     def fill(self, r, g, b):
         # rgb -> bgr
-        self.frame = np.full([pixel_width, pixel_height, 3],[b, g, r], np.uint8)
+        self.frame = np.full([pixel_height, pixel_width, 3],[b, g, r], np.uint8)
 
+    def delay(self, ms):
+        delay(ms)
 
-def delay(ms):
-    cv2.waitKey(ms)
+    def enhance(self):
+        enhance(self.image)
+
+    def line(self, start, end, color, width):
+        cv2.line(self.frame, start, end, color, width)
 
 
 def pixels():
@@ -74,15 +90,24 @@ def framebuffer():
             orientation=VERTICAL
         )
 
+        buff.fill = types.MethodType( fill, buff )
+        buff.image = buff.fill(0, 0, 0)
+
         def fill(self, *args):
             neopixel.fill(args)
 
-        buff.fill = types.MethodType( fill, buff )
+        def delay(self, *args):
+            delay(args)
+
+        def enhance(self):
+            enhance(self.image)
+
+        def line(self, start, end, color, width):
+            cv2.line(self.image, start, end, color, width)
+
         return buff
+
+    # not on pi, virtual matrix
     return VirtualPixelFramebuffer()
 
-def enhance_image(image):
-    color_enhance = ImageEnhance.Color(image)
-    colored_image = color_enhance.enhance(color_factor)
-    contrast_enhancer = ImageEnhance.Contrast(colored_image)
-    return contrast_enhancer.enhance(contrast_factor)
+
