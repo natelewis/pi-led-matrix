@@ -8,6 +8,7 @@ from config import (
     framerate,
 )
 import cv2
+import types
 
 # config and mapping for virtual env vs pi with LED matrix
 # Virtual env only works if it is a constant event loop
@@ -66,12 +67,18 @@ def pixels():
 def framebuffer():
     if not VIRTUAL_ENV:
         neopixel = pixels()
-        return PixelFramebuffer(
+        buff = PixelFramebuffer(
             neopixel,
             pixel_width,
             pixel_height,
             orientation=VERTICAL
         )
+
+        def fill(self, *args):
+            neopixel.fill(args)
+
+        buff.fill = types.MethodType( fill, buff )
+        return buff
     return VirtualPixelFramebuffer()
 
 def enhance_image(image):

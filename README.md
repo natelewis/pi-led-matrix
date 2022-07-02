@@ -118,8 +118,6 @@ fill(0, 0, 0) # turn off all LEDs
 fill(255, 0 , 0) # all LEDs red
 ```
 
-img = np.zeros((512,512,3), np.uint8)
-
 ## Contributing
 
 Checkout [CONTRIBUTING.md](CONTRIBUTING.md)
