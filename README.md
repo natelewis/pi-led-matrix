@@ -1,6 +1,14 @@
 # Raspberry Pi LED Matrix Playground
 
-This is a collection of widgets and helpers to drive a LED matrix of any size created with WS2812B LED strips.
+This is a collection of widgets and helpers to drive a LED matrix of any size created with WS2812B LED strips.  To work with this locally without a LED matrix, the library will detect you are not in the live environment and use `cv2` to render the matrix locally.
+
+## Virtual Env setup
+You can emulate the LED array locally.  It detects you do not have any of the adafruit modules installed and fails over to virtual mode.  Currently limited to animations only, your event loop must be < 100ms.  If you are not animating you can import the `delay()` function to keep the virtual matrix up.
+
+```bash
+pip3 install opencv-python
+pip3 install -U numpy
+```
 
 ## Hardware
 
@@ -37,15 +45,8 @@ _   _   _   _ ...
 2. Connect GPIO 18 of the RPi4 to the green LED wire
 3. Connect GND pin of the RPi4 to COM of the power supply
 4. Hang the LED strips to the curtain rod with your adhesive of choice
-5. Stick the wood to the back of the strips
+5. Stick the wood to the back of the strips to keep them from bending around
 
-## Virtual Env setup
-You can emulate the LED array locally.  It detects you do not have any of the adafruit modules installed and fails over to virtual mode.  Currently limited to animations only, your event loop must be < 100ms
-
-```bash
-pip3 install opencv-python
-pip3 install -U numpy
-```
 
 ## Raspberry Pi setup
 1. Install RPi OS 32 bit
@@ -104,6 +105,20 @@ This only works in live -- not currently compatible with virtual env
 ```bash
 sudo python3 marquee.py 'Message Here'
 ```
+
+## API
+
+The API consist of [cv2 drawing functions](https://docs.opencv.org/4.x/dc/da5/tutorial_py_drawing_functions.html) and a few extras that mimic some helpful function in the adafruit libraries.
+
+### led_matrix.fill(r, g, b):
+Fill all the pixels with the r/g/b values given.
+
+```python
+fill(0, 0, 0) # turn off all LEDs
+fill(255, 0 , 0) # all LEDs red
+```
+
+img = np.zeros((512,512,3), np.uint8)
 
 ## Contributing
 

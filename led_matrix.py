@@ -45,8 +45,14 @@ class VirtualPixelFramebuffer():
         # without this there is no rendering
         cv2.waitKey(100)
 
+    def fill(self, r, g, b):
+        # rgb -> bgr
+        self.frame = np.full([pixel_width, pixel_height, 3],[b, g, r], np.uint8)
+
+
 def delay(ms):
     cv2.waitKey(ms)
+
 
 def pixels():
     if not VIRTUAL_ENV:
