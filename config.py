@@ -16,7 +16,7 @@ framerate = 0.3 # in seconds
 
 # marquee
 delay = 0.0 # in seconds
-font_size = 3
+font_size = 1
 top_padding = 4
 
 def pixels():
