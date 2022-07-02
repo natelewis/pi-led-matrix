@@ -3,16 +3,17 @@
 VIRTUAL_ENV = False
 
 try:
+    # live env
     import board
     import neopixel
     from adafruit_pixel_framebuf import PixelFramebuffer, VERTICAL
-# virtual env
 except ImportError:
-    import cv2
+    # virtual env
     import numpy as np
     VIRTUAL_ENV = True
     board = {}
 
+import cv2
 from PIL import ImageEnhance
 
 # all
