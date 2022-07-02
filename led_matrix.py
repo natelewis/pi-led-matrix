@@ -1,4 +1,4 @@
-from PIL import ImageEnhance
+from PIL import ImageEnhance, Image
 from config import (
     pixel_width,
     pixel_height,
@@ -9,6 +9,7 @@ from config import (
 )
 import cv2
 import types
+import numpy as np
 
 # config and mapping for virtual env vs pi with LED matrix
 # Virtual env only works if it is a constant event loop
@@ -21,7 +22,6 @@ try:
     from adafruit_pixel_framebuf import PixelFramebuffer, VERTICAL
 except ImportError:
     # virtual env
-    import numpy as np
     VIRTUAL_ENV = True
     board = {}
 
@@ -35,19 +35,19 @@ def delay(ms):
     cv2.waitKey(ms)
 
 def enhance(image):
-    color_enhance = ImageEnhance.Color(image)
+    rgb_image = Image.fromarray(image, mode="RGB")
+    color_enhance = ImageEnhance.Color(rgb_image)
     colored_image = color_enhance.enhance(color_factor)
     contrast_enhancer = ImageEnhance.Contrast(colored_image)
-    return contrast_enhancer.enhance(contrast_factor)
+    contrasted_image =  contrast_enhancer.enhance(contrast_factor)
+    return np.array(contrasted_image)
 
 class VirtualPixelFramebuffer():
     def __init__(self):
-        self.frame = 0
         self.current_rendering = False
-        self.image = self.fill(0, 0, 0)
+        self.frame = self.fill(0, 0, 0)
 
     def image(self, img):
-        self.current_rendering = False
         self.frame = np.array(img)
 
     def display(self):
@@ -64,12 +64,11 @@ class VirtualPixelFramebuffer():
     def delay(self, ms):
         delay(ms)
 
-    def enhance(self):
-        enhance(self.image)
+    def enhance(self, img):
+        enhance(self.frame, img)
 
     def line(self, start, end, color, width):
         cv2.line(self.frame, start, end, color, width)
-
 
 def pixels():
     if not VIRTUAL_ENV:
@@ -80,34 +79,42 @@ def pixels():
             auto_write=False,
         )
 
-def framebuffer():
-    if not VIRTUAL_ENV:
+class LiveMatrix():
+    def __init__(self):
+        self.frame = self.fill(0, 0, 0)
         neopixel = pixels()
-        buff = PixelFramebuffer(
+        self.buff = PixelFramebuffer(
             neopixel,
             pixel_width,
             pixel_height,
             orientation=VERTICAL
         )
+        
+        
+    def fill(self, r, g, b):
+        self.frame = np.full([pixel_height, pixel_width, 3],[b, g, r], np.uint8)
 
-        buff.fill = types.MethodType( fill, buff )
-        buff.image = buff.fill(0, 0, 0)
+    def image(self, img):
+        self.frame = np.array(img)
 
-        def fill(self, *args):
-            neopixel.fill(args)
+    def line(self, start, end, color, width):
+        cv2.line(self.frame, start, end, color, width)
 
-        def delay(self, *args):
-            delay(args)
+    def delay(self, ms):
+        delay(ms)
 
-        def enhance(self):
-            enhance(self.image)
+    def enhance(self):
+        self.frame = enhance(self.frame)
 
-        def line(self, start, end, color, width):
-            cv2.line(self.image, start, end, color, width)
+    def show(self):
+        img = Image.fromarray(self.frame, mode="RGB")
+        self.buff.image(img)
+        self.buff.display()
+    
 
-        return buff
 
-    # not on pi, virtual matrix
+def Matrix():
+    if not VIRTUAL_ENV:
+        return LiveMatrix()
     return VirtualPixelFramebuffer()
-
 
