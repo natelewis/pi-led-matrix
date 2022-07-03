@@ -78,7 +78,7 @@ sudo pip3 install -U numpy
 sudo apt-get install libatlas-base-dev
 ```
 
-1. Update the `config.py` to adjust sizes, delays, and pin configuration.
+4. Update the `config.py` to adjust size and set.
 
 ## Testing your LED matrix
 
@@ -112,7 +112,7 @@ sudo python3 video.py filename.mp4
 
 ## Scrolling Marquee
 
-This works great if your 60x30 matrix, if not you will have to tweak.
+This works great if your resolution is 60x30, if not you will have to tweak.
 
 ```bash
 sudo python3 marquee.py 'Message Here'
