@@ -35,7 +35,7 @@ def getFrame(sec):
         # display frame
         matrix.image(rgb_image)
 
-        # fix the color a bit and show
+        # fix the color and show
         matrix.enhance()
         matrix.show()
 

@@ -14,18 +14,12 @@ if not exists(image_file):
     print(usage)
     sys.exit()
 
-# black image background in RGBA Mode
-image = Image.new("RGBA", (pixel_width, pixel_height))
-
 # The actual image
-image_layer = Image.open(image_file)
+image = Image.open(image_file)
 
-# alpha blend the icon onto the background
-image.alpha_composite(image_layer)
-
-# send the image to matrix 
+# send the image to matrix
 matrix = Matrix()
-matrix.image(image.convert("RGB"))
+matrix.image(image)
 matrix.enhance()
 matrix.show()
 

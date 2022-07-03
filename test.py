@@ -1,18 +1,18 @@
-# Simple test for NeoPixels on Raspberry Pi
+# Simple test to confirm color
 # Red... Green... Blue... (Repeat)
-from led_matrix import framebuffer, delay
+from led_matrix import Matrix
 
-framebuf = framebuffer()
+matrix = Matrix()
 
 while True:
-    framebuf.fill(255, 0, 0)
-    framebuf.display()
-    framebuf.delay(1000)
+    matrix.fill(255, 0, 0)
+    matrix.show()
+    matrix.delay(1000)
 
-    framebuf.fill(0, 255, 0)
-    framebuf.display()
-    framebuf.delay(1000)
+    matrix.fill(0, 255, 0)
+    matrix.show()
+    matrix.delay(1000)
 
-    framebuf.fill(0, 0, 255)
-    framebuf.display()
-    framebuf.delay(1000)
+    matrix.fill(0, 0, 255)
+    matrix.show()
+    matrix.delay(1000)

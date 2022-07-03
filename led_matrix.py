@@ -3,8 +3,9 @@ from config import (
     pixel_width,
     pixel_height,
     brightness,
-    contrast_factor,
-    color_factor,
+    contrast,
+    color,
+    virtual_framerate,
 )
 import cv2
 import numpy as np
@@ -35,25 +36,26 @@ def fill(r, g, b):
 def enhance(image):
     rgb_image = Image.fromarray(image, mode="RGB")
     color_enhance = ImageEnhance.Color(rgb_image)
-    colored_image = color_enhance.enhance(color_factor)
+    colored_image = color_enhance.enhance(color)
     contrast_enhancer = ImageEnhance.Contrast(colored_image)
-    contrasted_image =  contrast_enhancer.enhance(contrast_factor)
+    contrasted_image =  contrast_enhancer.enhance(contrast)
     return np.array(contrasted_image)
 
 class VirtualPixelFramebuffer():
     def __init__(self):
         self.current_rendering = False
-        self.frame = self.fill(0, 0, 0)
+        self.frame = fill(0, 0, 0)
 
     def image(self, img):
-        self.frame = np.array(img)
+        rgb_image = img.convert("RGB");
+        self.frame = np.array(rgb_image)
 
     def show(self):
         cv2.imshow('preview', self.frame)
 
         # this is the magic sauce -- waitKey runs all the cv2 handlers behind the scene
         # without this there is no rendering
-        cv2.waitKey(100)
+        cv2.waitKey(virtual_framerate)
 
     def fill(self, r, g, b):
         self.frame = fill(r, g, b)
@@ -78,7 +80,7 @@ def pixels():
 
 class LiveMatrix():
     def __init__(self):
-        self.frame = self.fill(0, 0, 0)
+        self.frame = fill(0, 0, 0)
         neopixel = pixels()
         self.buff = PixelFramebuffer(
             neopixel,
@@ -92,7 +94,8 @@ class LiveMatrix():
         self.frame = fill(r, g, b)
 
     def image(self, img):
-        self.frame = np.array(img)
+        rgb_image = img.convert("RGB");
+        self.frame = np.array(rgb_image)
 
     def line(self, start, end, color, width):
         cv2.line(self.frame, start, end, color, width)

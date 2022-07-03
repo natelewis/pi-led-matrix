@@ -1,9 +1,10 @@
 # Raspberry Pi LED Matrix Playground
 
-This is a collection of widgets and helpers to drive a LED matrix of any size created with WS2812B LED strips.  To work with this locally without a LED matrix, the library will detect you are not in the live environment and use `cv2` to render the matrix locally.
+This is a collection of examples and a API wrapper to simplify driving a LED matrix of any size created with WS2812B LED strips.  To work with this locally without a LED matrix, the library will detect you are not in the live environment and render the matrix locally.
 
 ## Virtual Env setup
-You can emulate the LED array locally.  It detects you do not have any of the adafruit modules installed and fails over to virtual mode.  Currently limited to animations only, your event loop must be < 100ms.  If you are not animating you can import the `delay()` function to keep the virtual matrix up.
+
+When emulating the LED array locally, it detects you do not have any of the adafruit modules installed and fails over to virtual mode.  When building your event loop for animations they must be no less than 100ms.  If you are not animating and wish to keep your virtual LED image up use the `delay(ms)`.
 
 ```bash
 pip3 install opencv-python
@@ -43,14 +44,20 @@ _   _   _   _ ...
 1. Attach power to every other strip in parallel
 
 2. Connect GPIO 18 of the RPi4 to the green LED wire
+
 3. Connect GND pin of the RPi4 to COM of the power supply
+
 4. Hang the LED strips to the curtain rod with your adhesive of choice
+
 5. Stick the wood to the back of the strips to keep them from bending around
 
 
 ## Raspberry Pi setup
+
 1. Install RPi OS 32 bit
+
 2. Get your Pi on your network, running headless and pull down this repo
+
 3. Execute the following to globally install libraries and dependencies:
 
 ```bash
@@ -106,66 +113,94 @@ This only works in live -- not currently compatible with virtual env
 sudo python3 marquee.py 'Message Here'
 ```
 
-# API`
+# API
 
 ```python
-from led_matrix import
-    framebuffer,
-    delay
-framebuffer.fill(0,0,0) # black background
-delay(1000)
+from led_matrix import matrix
+matrix.fill(0,0,0) # black background
+
+matrix.show()
+matrix.delay(1000)
 ```
 
-`framebuffer.fill(r, g, b)`:
-
----
-
-Fill all the pixels with the r/g/b values given.
-
-```python
-framebuffer.fill(0, 0, 0) # turn off all LEDs
-framebuffer.fill(255, 0 , 0) # all LEDs red
-```
-
-<br/>
-
-`framebuffer.delay(ms)`:
+`framebuffer.delay(ms)`
 
 ---
 
 Sleep x amount of milliseconds
 
 ```python
-framebuffer.delay(1000) # 1 second
-framebuffer.delay(1000 * 60) # 1 minute
+matrix.delay(1000) # 1 second
+matrix.delay(1000 * 60) # 1 minute
 ```
 
 <br/>
 
-`framebuffer.fill(r, g, b)`:
+`matrix.enhance()`
 
 ---
 
-Fill all the pixels with the r/g/b values given.
+Apply the color, contrast, and brightness setting from the config to the current frame.
 
 ```python
-framebuffer.fill(0, 0, 0) # turn off all LEDs
-framebuffer.fill(255, 0 , 0) # all LEDs red
+matrix.enhance()
 ```
 
 <br/>
 
-`framebuffer.line((x,y), (x,y), (r, g, b), width)`:
+`matrix.fill(r, g, b)`
 
 ---
 
-Fill all the pixels with the r/g/b values given.
+Fill all the pixels with the RGB values given.
 
 ```python
-framebuffer.line((0, 0), (60, 30), (255, 0, 0),  1) # diagonal red line
+matrix.fill(0, 0, 0) # turn off all LEDs
+matrix.fill(255, 0 , 0) # all LEDs red
 ```
 
 <br/>
+
+`matrix.image(Image)`
+
+---
+
+Display an image using the Python Imaging Library (PIL).
+
+```python
+from PIL import Image
+image = Image.open(image_file)
+matrix.image(image)
+matrix.show()
+```
+
+<br/>
+
+`framebuffer.line((x,y), (x,y), (r, g, b), width)`
+
+---
+
+Draw a line from the start to then end coordinates.
+
+```python
+matrix.line((0, 0), (60, 30), (255, 0, 0),  1) # diagonal red line
+```
+
+<br/>
+
+`matrix.show()`
+
+---
+
+Paint the current image to the LEDs
+
+```python
+matrix.fill(0, 0, 0)
+matrix.show() # turn off all LEDs
+```
+
+<br/>
+
 ## Contributing
 
 Checkout [CONTRIBUTING.md](CONTRIBUTING.md)
