@@ -55,7 +55,7 @@ class VirtualMatrix():
         self.frame = np.array(rgb_image)
 
     def show(self):
-        cv2.imshow('preview', enhance(self.frame))
+        cv2.imshow('LED matrix', enhance(self.frame))
 
         # this is the magic sauce -- waitKey runs all the cv2 handlers behind the scene
         # without this there is no rendering

@@ -1,12 +1,13 @@
 # Not currently compatible with virtual env yet
 import sys
-import time
-from led_matrix import framebuffer
+from led_matrix import Matrix
 
 # marquee
-delay = 0.0 # in seconds
-font_size = 1
-top_padding = 4
+delay = 1 # in ms
+font_thickness = 1
+font_scaling = 1
+top_padding = 9
+font_color= (255,0,0)
 
 usage = 'Usage: sudo image.py "my message"'
 if len(sys.argv) != 2:
@@ -15,16 +16,17 @@ if len(sys.argv) != 2:
 
 message = sys.argv[1]
 
-framebuf = framebuffer()
+matrix = Matrix()
 message_length = len(message);
-marquee_size = message_length * font_size * 6;
+marquee_size = message_length * font_scaling * 10;
 
 def display_text(x, y):
-    framebuf.fill(0x000000)
-    framebuf.text(message, x, y, 0x0000FF, size=font_size)
-    framebuf.display()
+    y = (10 * font_scaling) + top_padding
+    matrix.fill(0,0,0)
+    matrix.text(message, (x, y), font_scaling, font_color, font_thickness)
+    matrix.show()
 
 while True:
     for x in range(marquee_size, -marquee_size, -1):
         display_text(x, top_padding)
-        time.sleep(delay);
+        matrix.delay(delay)
