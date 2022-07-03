@@ -112,7 +112,7 @@ class LiveMatrix():
         cv2.rectangle(self.frame,  start, end, color, width)
 
     def circle(self, center, radius, color, width):
-        cv2.circle(self.frame, center, radius, swapRgbToBgr(color), width)
+        cv2.circle(self.frame, center, radius, color, width)
 
     def delay(self, ms):
         delay(ms)
