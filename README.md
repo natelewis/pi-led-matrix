@@ -119,12 +119,38 @@ sudo python3 marquee.py 'Message Here'
 When emulating the LED array locally, it detects you do not have any of the adafruit modules installed and fails over to virtual mode.  To pause your event loop when animating use the `matrix.delay()` function.  This will ensure your rendering window stays open.
 
 ```python
-from led_matrix import matrix
-matrix.fill(0,0,0) # black background
+from led_matrix import Matrix
+matrix = Matrix()
+while True:
+    matrix.fill(0,0,0) # black background
+    matrix.show()
+    matrix.delay(1000)
+    matrix.line((0, 0), (60, 30), (255, 0, 0),  1) # diagonal red line
+    matrix.show()
+    matrix.delay(1000)
+    matrix.rectangle((5, 5), (55, 25), (0, 255, 0),  1) # green rectangle
+    matrix.show()
+    matrix.delay(1000)
+    matrix.circle((30, 15), 10, (0, 0, 255),  2) # blue circle
+    matrix.show()
+    matrix.delay(1000)
 
-matrix.show()
-matrix.delay(1000)
 ```
+
+`matrix.circle((x,y), radius, (r, g, b), width)`
+
+---
+
+Draw a circle from its center point with a given radius.  A width of `-1` will fill in the circle.
+```python
+from led_matrix import Matrix
+matrix = Matrix()
+matrix.circle((30, 15), 10, (0, 0, 255),  3) # blue circle
+matrix.show()
+matrix.delay(5000)
+```
+
+<br/>
 
 `matrix.delay(ms)`
 
@@ -146,8 +172,13 @@ matrix.delay(1000 * 60) # 1 minute
 Fill all the pixels with the RGB values given.
 
 ```python
-matrix.fill(0, 0, 0) # turn off all LEDs
+from led_matrix import Matrix
+matrix = Matrix()
 matrix.fill(255, 0 , 0) # all LEDs red
+matrix.show()
+matrix.delay(5000)
+matrix.fill(0, 0, 0) # turn off all LEDs
+matrix.show()
 ```
 
 <br/>
@@ -160,9 +191,12 @@ Display an image using the Python Imaging Library (PIL).
 
 ```python
 from PIL import Image
+from led_matrix import Matrix
 image = Image.open(image_file)
+matrix = Matrix()
 matrix.image(image)
 matrix.show()
+matrix.delay(5000)
 ```
 
 <br/>
@@ -174,7 +208,11 @@ matrix.show()
 Draw a line from the start to then end coordinates.
 
 ```python
+from led_matrix import Matrix
+matrix = Matrix()
 matrix.line((0, 0), (60, 30), (255, 0, 0),  1) # diagonal red line
+matrix.show()
+matrix.delay(5000)
 ```
 
 <br/>
@@ -186,7 +224,11 @@ matrix.line((0, 0), (60, 30), (255, 0, 0),  1) # diagonal red line
 Draw a rectangle from the start to then end coordinates.
 
 ```python
-matrix.line((5, 5), (55, 25), (255, 0, 0),  1) # diagonal red line
+from led_matrix import Matrix
+matrix = Matrix()
+matrix.rectangle((5, 5), (55, 25), (255, 0, 0),  1) # red rectangle
+matrix.show()
+matrix.delay(5000)
 ```
 <br/>
 

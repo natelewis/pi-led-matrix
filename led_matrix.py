@@ -41,6 +41,10 @@ def enhance(image):
     contrasted_image =  contrast_enhancer.enhance(contrast)
     return np.array(contrasted_image)
 
+def swapRgbToBgr(color):
+    r, g, b = color
+    return (b, g, r)
+
 class VirtualMatrix():
     def __init__(self):
         self.current_rendering = False
@@ -64,10 +68,14 @@ class VirtualMatrix():
         delay(ms)
 
     def line(self, start, end, color, width):
-        cv2.line(self.frame, start, end, color, width)
+        cv2.line(self.frame, start, end, swapRgbToBgr(color), width)
 
     def rectangle(self, start, end, color, width):
-        cv2.rectangle(self.frame,  start, end, color, width)
+        cv2.rectangle(self.frame,  start, end, swapRgbToBgr(color), width)
+
+    def circle(self, center, radius, color, width):
+        cv2.circle(self.frame, center, radius, swapRgbToBgr(color), width)
+
 
 def pixels():
     if not VIRTUAL_ENV:
@@ -102,6 +110,9 @@ class LiveMatrix():
 
     def rectangle(self, start, end, color, width):
         cv2.rectangle(self.frame,  start, end, color, width)
+
+    def circle(self, center, radius, color, width):
+        cv2.circle(self.frame, center, radius, swapRgbToBgr(color), width)
 
     def delay(self, ms):
         delay(ms)
