@@ -250,14 +250,14 @@ matrix.show() # turn off all LEDs
 
 <br/>
 
-`matrix.text(self, text, start, font, scale, color, thickness)`
+`matrix.text(self, text, start, scale, color, thickness, font)`
 
 ---
 
 Place text at the given location. ( font selection is currently disabled )
 
 ```python
-matrix.text('hello', (10,20), 'SIMPLEX', 0.5, (255,0,0), 1)
+matrix.text('hello', (10,20), 1, (255,0,0), 1, 'PLAIN')
 matrix.show()
 matrix.delay(5000)
 ```

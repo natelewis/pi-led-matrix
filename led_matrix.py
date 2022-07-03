@@ -76,10 +76,7 @@ class VirtualMatrix():
     def circle(self, center, radius, color, width):
         cv2.circle(self.frame, center, radius, swapRgbToBgr(color), width)
 
-    def text(self, text, start, font, scale, color, thickness):
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        # font = cv2.FONT_HERSHEY_SCRIPT_SIMPLEX
-        # font = cv2.FONT_HERSHEY_PLAIN
+    def text(self, text, start, scale, color, thickness, font = cv2.FONT_HERSHEY_PLAIN):
         cv2.putText(self.frame, text, start, font, scale, swapRgbToBgr(color), thickness, cv2.LINE_4)
 
 
@@ -128,10 +125,7 @@ class LiveMatrix():
         self.buff.image(img)
         self.buff.display()
 
-    def text(self, text, start, font, scale, color, thickness):
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        # font = cv2.FONT_HERSHEY_SCRIPT_SIMPLEX
-        # font = cv2.FONT_HERSHEY_PLAIN
+    def text(self, text, start, scale, color, thickness, font = cv2.FONT_HERSHEY_PLAIN):
         cv2.putText(self.frame, text, start, font, scale, color, thickness, cv2.LINE_4)
 
 def Matrix():
