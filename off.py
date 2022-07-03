@@ -1,6 +1,5 @@
-from config import pixels, pixel_height, pixel_width
+from led_matrix import Matrix
 
-pixels = pixels()
-
-pixels.fill((0, 0, 0))
-pixels.show()
+matrix = Matrix()
+matrix.fill((0, 0, 0))
+matrix.show()
