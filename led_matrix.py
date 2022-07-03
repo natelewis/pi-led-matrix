@@ -70,6 +70,9 @@ class VirtualMatrix():
     def line(self, start, end, color, width):
         cv2.line(self.frame, start, end, swapRgbToBgr(color), width)
 
+    def pixel(self, start, color, width):
+        cv2.line(self.frame, start, start, swapRgbToBgr(color), 1)
+
     def rectangle(self, start, end, color, width):
         cv2.rectangle(self.frame,  start, end, swapRgbToBgr(color), width)
 
@@ -110,6 +113,9 @@ class LiveMatrix():
 
     def line(self, start, end, color, width):
         cv2.line(self.frame, start, end, color, width)
+
+    def pixel(self, start, color, width):
+        cv2.line(self.frame, start, start, color, 1)
 
     def rectangle(self, start, end, color, width):
         cv2.rectangle(self.frame,  start, end, color, width)

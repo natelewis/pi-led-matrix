@@ -221,6 +221,22 @@ matrix.delay(5000)
 
 <br/>
 
+`matrix.pixel((x,y), (r, g, b), width)`
+
+---
+
+Draw a line from the start to then end coordinates.
+
+```python
+from led_matrix import Matrix
+matrix = Matrix()
+matrix.line((30, 15), (255, 0, 0),  1) # diagonal red line
+matrix.show()
+matrix.delay(5000)
+```
+
+<br/>
+
 `matrix.rectangle((x,y), (x,y), (r, g, b), width)`
 
 ---
