@@ -126,7 +126,7 @@ matrix.show()
 matrix.delay(1000)
 ```
 
-`framebuffer.delay(ms)`
+`matrix.delay(ms)`
 
 ---
 
@@ -135,18 +135,6 @@ Sleep x amount of milliseconds.
 ```python
 matrix.delay(1000) # 1 second
 matrix.delay(1000 * 60) # 1 minute
-```
-
-<br/>
-
-`matrix.enhance()`
-
----
-
-Apply the color, contrast setting from the config to the current frame.
-
-```python
-matrix.enhance()
 ```
 
 <br/>
@@ -179,7 +167,7 @@ matrix.show()
 
 <br/>
 
-`framebuffer.line((x,y), (x,y), (r, g, b), width)`
+`matrix.line((x,y), (x,y), (r, g, b), width)`
 
 ---
 
@@ -191,6 +179,17 @@ matrix.line((0, 0), (60, 30), (255, 0, 0),  1) # diagonal red line
 
 <br/>
 
+`matrix.rectangle((x,y), (x,y), (r, g, b), width)`
+
+---
+
+Draw a rectangle from the start to then end coordinates.
+
+```python
+matrix.line((5, 5), (55, 25), (255, 0, 0),  1) # diagonal red line
+```
+<br/>
+
 `matrix.show()`
 
 ---
@@ -198,8 +197,12 @@ matrix.line((0, 0), (60, 30), (255, 0, 0),  1) # diagonal red line
 Paint the current image to the LEDs
 
 ```python
+matrix.fill(0, 0, 255)
+matrix.show() # turn all LEDs blue
+matrix.delay(1000)
 matrix.fill(0, 0, 0)
 matrix.show() # turn off all LEDs
+
 ```
 
 <br/>

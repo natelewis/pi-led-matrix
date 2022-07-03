@@ -20,7 +20,6 @@ image = Image.open(image_file)
 # send the image to matrix
 matrix = Matrix()
 matrix.image(image)
-matrix.enhance()
 matrix.show()
 
 # in virtual env this lets the image hang out for 5 seconds

@@ -41,7 +41,7 @@ def enhance(image):
     contrasted_image =  contrast_enhancer.enhance(contrast)
     return np.array(contrasted_image)
 
-class VirtualPixelFramebuffer():
+class VirtualMatrix():
     def __init__(self):
         self.current_rendering = False
         self.frame = fill(0, 0, 0)
@@ -51,7 +51,7 @@ class VirtualPixelFramebuffer():
         self.frame = np.array(rgb_image)
 
     def show(self):
-        cv2.imshow('preview', self.frame)
+        cv2.imshow('preview', enhance(self.frame))
 
         # this is the magic sauce -- waitKey runs all the cv2 handlers behind the scene
         # without this there is no rendering
@@ -63,11 +63,11 @@ class VirtualPixelFramebuffer():
     def delay(self, ms):
         delay(ms)
 
-    def enhance(self):
-        self.frame = enhance(self.frame)
-
     def line(self, start, end, color, width):
         cv2.line(self.frame, start, end, color, width)
+
+    def rectangle(self, start, end, color, width):
+        cv2.rectangle(self.frame,  start, end, color, width)
 
 def pixels():
     if not VIRTUAL_ENV:
@@ -100,19 +100,19 @@ class LiveMatrix():
     def line(self, start, end, color, width):
         cv2.line(self.frame, start, end, color, width)
 
+    def rectangle(self, start, end, color, width):
+        cv2.rectangle(self.frame,  start, end, color, width)
+
     def delay(self, ms):
         delay(ms)
 
-    def enhance(self):
-        self.frame = enhance(self.frame)
-
     def show(self):
-        img = Image.fromarray(self.frame, mode="RGB")
+        img = Image.fromarray(enhance(self.frame), mode="RGB")
         self.buff.image(img)
         self.buff.display()
 
 def Matrix():
     if not VIRTUAL_ENV:
         return LiveMatrix()
-    return VirtualPixelFramebuffer()
+    return VirtualMatrix()
 

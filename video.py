@@ -34,9 +34,6 @@ def getFrame(sec):
 
         # display frame
         matrix.image(rgb_image)
-
-        # fix the color and show
-        matrix.enhance()
         matrix.show()
 
     return hasFrames
