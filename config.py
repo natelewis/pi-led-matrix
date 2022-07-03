@@ -12,4 +12,5 @@ contrast = 2
 color = 1.5
 
 # framerate between renderings in milliseconds in virtual mode
+# this mimics the delay of hardware latency
 virtual_framerate = 100

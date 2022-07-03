@@ -1,14 +1,15 @@
 # Raspberry Pi LED Matrix Playground
 
-This is a collection of examples and a API wrapper to simplify driving a LED matrix of any size created with WS2812B LED strips.  To work with this locally without a LED matrix, the library will detect you are not in the live environment and render the matrix locally.
+This is a collection of examples and an API wrapper to simplify driving a LED matrix of any size created with WS2812B LED strips.  To tinker locally without a LED matrix, the library will detect you are not in the live environment and render the matrix in a window on your local machine.
 
-## Virtual Env setup
-
-When emulating the LED array locally, it detects you do not have any of the adafruit modules installed and fails over to virtual mode.  When building your event loop for animations they must be no less than 100ms.  If you are not animating and wish to keep your virtual LED image up use the `delay(ms)`.
+## Virtual environment quick start
 
 ```bash
+git clone git@github.com:natelewis/pi-led-matrix-playground.git
+cd pi-led-matrix-playground
 pip3 install opencv-python
 pip3 install -U numpy
+python3 test.py
 ```
 
 ## Hardware
@@ -21,7 +22,7 @@ Shopping List:
 * 5V power supply
 * Raspberry Pi 4
 * Extra 3 pin wire @ 22AWG
-* Extra JST SM 3 Pin Connectors for extension to where your panel is from the Pi/PSU
+* A few Male/Female JST SM 3 Pin Connectors to create an extension cable from where your panel is to your Pi/PSU
 * Curtain rod
 * Hobby wood/bamboo @ 3/8" wide to stick on the back of the LED strips to keep them straight
 * A bit of patience -- Takes about 4-5 hours to put it all together
@@ -75,7 +76,7 @@ sudo apt-get install libatlas-base-dev
 
 1. Update the `config.py` to adjust sizes, delays, and pin configuration.
 
-## Test hardware
+## Testing your LED matrix
 
 Running the test script will cycle between R..., G..., B... (repeat)
 
@@ -83,7 +84,15 @@ Running the test script will cycle between R..., G..., B... (repeat)
 sudo python3 test.py
 ```
 
-## Playing videos
+## Displaying an image on your LED matrix
+
+Resize the image in any graphic editor to the size of the matrix and save it as a PNG.
+
+```bash
+sudo python3 image.py image.png
+```
+
+## Playing videos on your LED matrix
 
 To play a video first resize the video before playing with `ffmpeg` to the size of your matrix:
 
@@ -97,14 +106,6 @@ To play the video on the matrix:
 sudo python3 video.py filename.mp4
 ```
 
-## Displaying an image
-
-Resize the image in any graphic editor to the size of the matrix and save it as a PNG.
-
-```bash
-sudo python3 image.py image.png
-```
-
 ## Scrolling Marquee
 
 This only works in live -- not currently compatible with virtual env
@@ -114,6 +115,8 @@ sudo python3 marquee.py 'Message Here'
 ```
 
 # API
+
+When emulating the LED array locally, it detects you do not have any of the adafruit modules installed and fails over to virtual mode.  To pause your event loop when animating use the `matrix.delay()` function.  This will ensure your rendering window stays open.
 
 ```python
 from led_matrix import matrix
@@ -127,7 +130,7 @@ matrix.delay(1000)
 
 ---
 
-Sleep x amount of milliseconds
+Sleep x amount of milliseconds.
 
 ```python
 matrix.delay(1000) # 1 second
@@ -140,7 +143,7 @@ matrix.delay(1000 * 60) # 1 minute
 
 ---
 
-Apply the color, contrast, and brightness setting from the config to the current frame.
+Apply the color, contrast setting from the config to the current frame.
 
 ```python
 matrix.enhance()

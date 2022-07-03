@@ -1,7 +1,7 @@
 import sys
 from PIL import Image
 from os.path import exists
-from led_matrix import Matrix, pixel_height, pixel_width
+from led_matrix import Matrix
 
 usage = "Usage: sudo image.py image-name.png"
 if len(sys.argv) != 2:
