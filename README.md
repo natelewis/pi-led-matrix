@@ -1,4 +1,4 @@
-# Raspberry Pi LED Matrix Playground
+# Raspberry Pi LED Matrix
 
 This is a collection of examples and an API wrapper to simplify driving a LED matrix of any size created with WS2812B LED strips.  To tinker locally without a LED matrix, the library will detect you are not in the live environment and render the matrix in a window on your local machine.
 
@@ -10,6 +10,7 @@ cd pi-led-matrix-playground
 pip3 install opencv-python
 pip3 install -U numpy
 python3 test.py
+# Red, blue, green... in a tiny 60x30 window
 ```
 
 ## Hardware
@@ -62,13 +63,16 @@ _   _   _   _ ...
 3. Execute the following to globally install libraries and dependencies:
 
 ```bash
-sudo apt update
-sudo apt install -y ffmpeg
+sudo apt update # you probably already did this
+sudo apt install -y ffmpeg # needed to shrink videos to our matrix size
+
+# libraries that are needed to communicate with the LED strips that Adafruit wrote for us
 sudo pip3 install --upgrade adafruit-python-shell
 wget https://raw.githubusercontent.com/adafruit/Raspberry-Pi-Installer-Scripts/master/raspi-blinka.py
 sudo python3 raspi-blinka.py
 sudo pip3 install rpi_ws281x adafruit-circuitpython-neopixel
-sudo python3 -m pip install --force-reinstall adafruit-blinka
+
+# these are image manipulation tools that are used for rendering
 sudo pip3 install opencv-python
 sudo pip3 install -U numpy
 sudo apt-get install libatlas-base-dev
@@ -108,7 +112,7 @@ sudo python3 video.py filename.mp4
 
 ## Scrolling Marquee
 
-This only works in live -- not currently compatible with virtual env
+This works great if your 60x30 matrix, if not you will have to tweak.
 
 ```bash
 sudo python3 marquee.py 'Message Here'
@@ -116,7 +120,7 @@ sudo python3 marquee.py 'Message Here'
 
 # API
 
-When emulating the LED array locally, it detects you do not have any of the adafruit modules installed and fails over to virtual mode.  To pause your event loop when animating use the `matrix.delay()` function.  This will ensure your rendering window stays open.
+When emulating the LED array locally, it detects you do not have any of the adafruit modules installed and fails over to virtual mode.  To synchronously pause your event loop when animating use the `matrix.delay()` function.  This will ensure your rendering window stays open while waiting.
 
 ```python
 from led_matrix import Matrix
