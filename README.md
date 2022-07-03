@@ -230,6 +230,7 @@ matrix.rectangle((5, 5), (55, 25), (255, 0, 0),  1) # red rectangle
 matrix.show()
 matrix.delay(5000)
 ```
+
 <br/>
 
 `matrix.show()`
@@ -245,6 +246,20 @@ matrix.delay(1000)
 matrix.fill(0, 0, 0)
 matrix.show() # turn off all LEDs
 
+```
+
+<br/>
+
+`matrix.text(self, text, start, font, scale, color, thickness)`
+
+---
+
+Place text at the given location. ( font selection is currently disabled )
+
+```python
+matrix.text('hello', (10,20), 'SIMPLEX', 0.5, (255,0,0), 1)
+matrix.show()
+matrix.delay(5000)
 ```
 
 <br/>
