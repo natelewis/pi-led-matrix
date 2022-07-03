@@ -13,4 +13,4 @@ color = 1.5
 
 # framerate between renderings in milliseconds in virtual mode
 # this mimics the delay of hardware latency
-virtual_framerate = 100
+virtual_framerate = 75 # this is pretty close to a raspi 4 processing speed with a 60x30 matrix
