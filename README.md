@@ -88,9 +88,17 @@ Running the test script will cycle between R..., G..., B... (repeat)
 ./run.sh rgb_test
 ```
 
+## Turning of your LEDs
+
+LEDs will maintain their currently lit state when you cancel your script.  You can use the off effect to turn them off:
+
+```bash
+./run.sh off
+```
+
 ## Effects
 
-Custom effects are orginized in the `effects` directory with the following structure:
+Custom effects are organized in the `effects` directory with the following structure:
 
 ```text
 > effects > effect_name > effects.py
@@ -98,7 +106,7 @@ Custom effects are orginized in the `effects` directory with the following struc
 
 The effects.py should have a `run()` function that will be executed by the `run.sh` script.
 
-[View the effects doc for effects list](effects/README.md)
+[View the effects list](effects/README.md)
 # API
 
 When emulating the LED array locally, it detects you do not have any of the adafruit modules installed and fails over to virtual mode.  To synchronously pause your event loop when animating use the `matrix.delay()` function.  This will ensure your rendering window stays open while waiting.
