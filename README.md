@@ -64,18 +64,12 @@ _   _   _   _ ...
 
 ```bash
 sudo apt update # you probably already did this
-sudo apt install -y ffmpeg # needed to shrink videos to your matrix size
+sudo apt install -y ffmpeg libatlas-base-dev
 
 # libraries that are needed to communicate with the LED strips that Adafruit wrote for us
-sudo pip3 install --upgrade adafruit-python-shell
+sudo pip3 install --upgrade adafruit-python-shell opencv-python rpi_ws281x adafruit-circuitpython-neopixel numpy adafruit_pixel_framebuf
 wget https://raw.githubusercontent.com/adafruit/Raspberry-Pi-Installer-Scripts/master/raspi-blinka.py
 sudo python3 raspi-blinka.py
-sudo pip3 install rpi_ws281x adafruit-circuitpython-neopixel
-
-# these are image manipulation tools that are used for rendering
-sudo pip3 install opencv-python
-sudo pip3 install -U numpy
-sudo apt-get install libatlas-base-dev
 ```
 
 4. Update the `config.py` to adjust sizes if anything is different.
