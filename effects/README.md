@@ -36,6 +36,14 @@ Simple effect that sets all lights to black
 ./run.sh off
 ```
 
+## rainbow_pulse
+
+Cycle through the rainbow slowly while pulsing in and out.
+
+```bash
+./run.sh rgb_test
+```
+
 ## rgb_test
 
 Test that checks your RGB configuration.  Red... Blue... Green... (repeat)
