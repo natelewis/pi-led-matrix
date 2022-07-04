@@ -15,7 +15,7 @@ python3 test.py
 
 ## Hardware
 
-Here is the high level construction details of the LED matrix panel.
+Here is the high level construction details of a LED matrix panel.
 
 Shopping List:
 
@@ -64,7 +64,7 @@ _   _   _   _ ...
 
 ```bash
 sudo apt update # you probably already did this
-sudo apt install -y ffmpeg # needed to shrink videos to our matrix size
+sudo apt install -y ffmpeg # needed to shrink videos to your matrix size
 
 # libraries that are needed to communicate with the LED strips that Adafruit wrote for us
 sudo pip3 install --upgrade adafruit-python-shell
@@ -78,7 +78,7 @@ sudo pip3 install -U numpy
 sudo apt-get install libatlas-base-dev
 ```
 
-4. Update the `config.py` to adjust size and set.
+4. Update the `config.py` to adjust sizes if anything is different.
 
 ## Testing your LED matrix
 
@@ -104,16 +104,23 @@ Custom effects are organized in the `effects` directory with the following struc
 > effects > effect_name > effects.py
 ```
 
-The effects.py should have a `run()` function that will be executed by the `run.sh` script.
+The effects.py have a `run()` function that will be executed by the `run.sh` script.
 
-[View the effects list](effects/README.md)
+[View the effects list and usage details](effects/README.md)
 # API
 
 When emulating the LED array locally, it detects you do not have any of the adafruit modules installed and fails over to virtual mode.  To synchronously pause your event loop when animating use the `matrix.delay()` function.  This will ensure your rendering window stays open while waiting.
 
+If you want use this outside of the effects directory import the `Matrix` class.
+
 ```python
 from led_matrix import Matrix
 matrix = Matrix()
+```
+
+If you building inside an [effect](effects/README.md) this is already been done for you and passed to your `run()` function.
+
+```python
 while True:
     matrix.fill(0,0,0) # black background
     matrix.show()
@@ -136,8 +143,6 @@ while True:
 
 Draw a circle from its center point with a given radius.  A width of `-1` will fill in the circle.
 ```python
-from led_matrix import Matrix
-matrix = Matrix()
 matrix.circle((30, 15), 10, (0, 0, 255),  3) # blue circle
 matrix.show()
 matrix.delay(5000)
@@ -165,8 +170,6 @@ matrix.delay(1000 * 60) # 1 minute
 Fill all the pixels with the RGB values given.
 
 ```python
-from led_matrix import Matrix
-matrix = Matrix()
 matrix.fill(255, 0 , 0) # all LEDs red
 matrix.show()
 matrix.delay(5000)
@@ -184,9 +187,7 @@ Display an image using the Python Imaging Library (PIL).
 
 ```python
 from PIL import Image
-from led_matrix import Matrix
 image = Image.open(image_file)
-matrix = Matrix()
 matrix.image(image)
 matrix.show()
 matrix.delay(5000)
@@ -201,8 +202,6 @@ matrix.delay(5000)
 Draw a line from the start to then end coordinates.
 
 ```python
-from led_matrix import Matrix
-matrix = Matrix()
 matrix.line((0, 0), (60, 30), (255, 0, 0),  1) # diagonal red line
 matrix.show()
 matrix.delay(5000)
@@ -217,8 +216,6 @@ matrix.delay(5000)
 Draw a line from the start to then end coordinates.
 
 ```python
-from led_matrix import Matrix
-matrix = Matrix()
 matrix.line((30, 15), (255, 0, 0),  1) # diagonal red line
 matrix.show()
 matrix.delay(5000)
@@ -233,8 +230,6 @@ matrix.delay(5000)
 Draw a rectangle from the start to then end coordinates.
 
 ```python
-from led_matrix import Matrix
-matrix = Matrix()
 matrix.rectangle((5, 5), (55, 25), (255, 0, 0),  1) # red rectangle
 matrix.show()
 matrix.delay(5000)
