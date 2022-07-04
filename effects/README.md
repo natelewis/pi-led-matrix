@@ -1,0 +1,59 @@
+
+# Raspberry Pi LED Matrix Effects
+
+This is the list of current contributed effects that can be run.  They can be loaded be ran individually with the `run.sh` script:
+
+```bash
+./run.sh effect_name
+```
+
+## image
+
+Resize the image in any graphic editor to the size of the matrix and save it as a PNG.  Place image in the image effect directory.
+
+```bash
+./run image image.png
+```
+
+## marquee
+
+This currently is set for matrix's at 60x30, and in red.  Change the settings in the effect script to alter.
+
+```bash
+./run.sh marquee 'Message Here'
+```
+
+## rgb_test
+
+Test that checks your RGB configuration.  Red... Blue... Green... (repeat)
+
+```bash
+./run.sh rgb_test
+```
+
+## video
+
+To play a video first resize the video before playing with `ffmpeg` to the size of your matrix:
+
+```bash
+ffmpeg -i filename.mp4 -vf scale=60:30 filename-60x30.mp4
+```
+
+To play the video on the matrix with the `mp4` file copied to the video effect directory
+
+```bash
+./run video filename.mp4
+```
+
+## water_ripple
+
+Blue circle animation that resembles water ripples.
+
+```bash
+./run.sh water_ripple
+```
+
+
+---
+
+Created by [@natelewis](https://github.com/natelewis). Released under the MIT license.
