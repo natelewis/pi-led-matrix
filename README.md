@@ -85,39 +85,20 @@ sudo apt-get install libatlas-base-dev
 Running the test script will cycle between R..., G..., B... (repeat)
 
 ```bash
-sudo python3 test.py
+./run.sh rgb_test
 ```
 
-## Displaying an image on your LED matrix
+## Effects
 
-Resize the image in any graphic editor to the size of the matrix and save it as a PNG.
+Custom effects are orginized in the `effects` directory with the following structure:
 
-```bash
-sudo python3 image.py image.png
+```text
+> effects > effect_name > effects.py
 ```
 
-## Playing videos on your LED matrix
+The effects.py should have a `run()` function that will be executed by the `run.sh` script.
 
-To play a video first resize the video before playing with `ffmpeg` to the size of your matrix:
-
-```bash
-ffmpeg -i filename.mp4 -vf scale=60:30 filename-60x30.mp4
-```
-
-To play the video on the matrix:
-
-```bash
-sudo python3 video.py filename.mp4
-```
-
-## Scrolling Marquee
-
-This works great if your resolution is 60x30, if not you will have to tweak.
-
-```bash
-sudo python3 marquee.py 'Message Here'
-```
-
+[View the effects doc for effects list](effects/README.md)
 # API
 
 When emulating the LED array locally, it detects you do not have any of the adafruit modules installed and fails over to virtual mode.  To synchronously pause your event loop when animating use the `matrix.delay()` function.  This will ensure your rendering window stays open while waiting.
