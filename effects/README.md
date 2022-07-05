@@ -36,12 +36,12 @@ Simple effect that sets all lights to black
 ./run.sh off
 ```
 
-## rainbow_pulse
+## rain
 
-Cycle through the rainbow slowly while pulsing in and out.
+Simple rain effect.
 
 ```bash
-./run.sh rgb_test
+./run.sh rain
 ```
 
 ## rgb_test
