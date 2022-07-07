@@ -36,12 +36,12 @@ Simple effect that sets all lights to black
 ./run.sh off
 ```
 
-## rain
+## snow
 
-Simple rain effect.
+Simple snow effect.
 
 ```bash
-./run.sh rain
+./run.sh snow
 ```
 
 ## rgb_test
