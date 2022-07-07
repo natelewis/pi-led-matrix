@@ -1,6 +1,12 @@
 # Raspberry Pi LED Matrix (BETA)
 
 This is a collection of examples and an API wrapper to simplify driving a LED matrix of any size created with WS2812B LED strips.  To tinker locally without a LED matrix, the library will detect you are not in the live environment and render the matrix in a window on your local machine.
+### Virtual Environment Example
+https://user-images.githubusercontent.com/1588877/177685586-e4cb158d-c840-4b89-855e-5bfd087991b5.mp4
+
+
+### Live LED Matrix Example
+https://user-images.githubusercontent.com/1588877/177685583-cab5ac70-1f26-48f9-ab31-55bf0a61bf8d.mp4
 
 ## Virtual environment quick start
 
