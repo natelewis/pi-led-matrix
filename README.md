@@ -1,6 +1,6 @@
-# Raspberry Pi LED Matrix (BETA)
+# Raspberry Pi LED Matrix
 
-This is a collection of examples and an API wrapper to simplify driving a LED matrix of any size created with WS2812B LED strips.  To tinker locally without a LED matrix, the library will detect you are not in the live environment and render the matrix in a window on your local machine.
+This is a collection of examples and an LED matrix library to simplify driving a LED matrix of any size created with WS2812B LED strips.  To tinker locally without a LED matrix, the library will detect you are not in the live environment and render the matrix in a window on your local machine.
 ### Virtual Environment 60x30 Example
 https://user-images.githubusercontent.com/1588877/177685586-e4cb158d-c840-4b89-855e-5bfd087991b5.mp4
 
@@ -28,13 +28,13 @@ Shopping List:
 * WS2812B LED strips
 * 5V power supply
 * Raspberry Pi 4
-* Extra 3 pin wire @ 22AWG
-* A few Male/Female JST SM 3 Pin Connectors to create an extension cable from where your panel is to your Pi/PSU
-* Curtain rod
+* A few extra meters of 3 pin wire @ 22AWG
+* Male/Female JST SM 3 Pin Connectors to create an extension cable from where your panel is to your Pi/PSU
+* Curtain rod or other hangable rod you can attach your strips to
 * Hobby wood/bamboo @ 3/8" wide to stick on the back of the LED strips to keep them straight
 * A bit of patience -- Takes about 4-5 hours to put it all together
 
-In this example I built a 60x30 array with 5V 300W 60A power supply:
+In this example I built a 60x30 array with 5V 300W 60A power supply, which is plenty of power for this size matrix.
 
 1. Collect a 60 count of 30 LED per meter 1M strips
 2. Build the matrix in a chain pattern:
@@ -49,7 +49,7 @@ _   _   _   _ ...
  |_| |_| |_|
 ```
 
-1. Attach power to every other strip in parallel
+1. Attach 5V power from the PSU to top of each strip in parallel
 
 2. Connect GPIO 18 of the RPi4 to the green LED wire
 
@@ -57,7 +57,7 @@ _   _   _   _ ...
 
 4. Hang the LED strips to the curtain rod or other mount with your adhesive of choice
 
-5. Stick the wood to the back of the strips to keep them from bending around
+5. Stick the wood to the back of the strips to keep them from bending around or some other creative way to keep them straight
 
 
 ## Raspberry Pi setup
@@ -193,7 +193,7 @@ matrix.delay(5000)
 
 ---
 
-Draw a line from the start to then end coordinates.
+Draw a line from the start to the end coordinates.
 
 ```python
 matrix.line((0, 0), (60, 30), (255, 0, 0),  1) # diagonal red line
@@ -207,7 +207,7 @@ matrix.delay(5000)
 
 ---
 
-Draw a line from the start to then end coordinates.
+Draw a line from the start to the end coordinates.
 
 ```python
 matrix.line((30, 15), (255, 0, 0),  1) # diagonal red line
@@ -221,7 +221,7 @@ matrix.delay(5000)
 
 ---
 
-Draw a rectangle from the start to then end coordinates.
+Draw a rectangle from the start to the end coordinates.
 
 ```python
 matrix.rectangle((5, 5), (55, 25), (255, 0, 0),  1) # red rectangle
