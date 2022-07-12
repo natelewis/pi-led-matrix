@@ -10,14 +10,15 @@ font_color= (255,0,0)
 usage = 'Usage: ./run.sh marquee "my message"'
 
 def run(matrix, config):
+    """scroll large marquee text"""
     sys.argv.pop(0) # remove loader arg
     if len(sys.argv) != 2:
         print(usage)
         sys.exit()
 
     message = sys.argv[1]
-    message_length = len(message);
-    marquee_size = message_length * font_scaling * 10;
+    message_length = len(message)
+    marquee_size = message_length * font_scaling * 10
 
     def display_text(x, y):
         y = (10 * font_scaling) + top_padding

@@ -1,6 +1,7 @@
 # Simple test to confirm color
 # Red... Green... Blue... (Repeat)
-def run(matrix,confg):
+def run(matrix, config):
+    """red, green, blue, repeat"""
     while True:
         matrix.fill(255, 0, 0)
         matrix.show()

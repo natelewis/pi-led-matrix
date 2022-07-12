@@ -12,12 +12,20 @@ To make a new effect, just copy an existing effect directory  that might have so
 * pixel_height
 * effect_directory
 
+## hallway
+
+Effect of moving down a hallway
+
+```bash
+./run.sh hallway
+```
+
 ## image
 
 Resize the image in any graphic editor to the size of the matrix and save it as a PNG.  Place image in the image effect directory.
 
 ```bash
-./run image image.png
+./run.sh image image.png
 ```
 
 ## marquee
@@ -63,7 +71,7 @@ ffmpeg -i filename.mp4 -vf scale=60:30 filename-60x30.mp4
 To play the video on the matrix with the `mp4` file copied to the video effect directory
 
 ```bash
-./run video filename.mp4
+./run.sh video filename.mp4
 ```
 
 ## water_ripple

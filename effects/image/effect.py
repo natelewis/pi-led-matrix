@@ -3,6 +3,7 @@ from PIL import Image
 from os.path import exists
 
 def run(matrix, config):
+    """show an png image"""
     effect_dir = config['effect_dir']
     sys.argv.pop(0) # remove loader arg
     usage = "Usage: ./run.sh image image-name.png"

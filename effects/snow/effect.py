@@ -2,12 +2,13 @@ import random
 from operator import itemgetter
 
 def run(matrix, config):
+    """falling snow"""
     snow_flake_count = 60
     random_delay = 10 # 1 in x chance of falling when reset to top
     snow_flakes = [{'y': -1, 'x': 0}]*snow_flake_count
     while True:
         matrix.fill(0,0,0)
-        for idx in range(len(snow_flakes)):
+        for idx, _ in enumerate(snow_flakes):
             x, y = itemgetter('x', 'y')( snow_flakes[idx])
 
             # if fell to the bottom reset to the top

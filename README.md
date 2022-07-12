@@ -111,7 +111,7 @@ The effects.py have a `run()` function that will be executed by the `run.sh` scr
 
 When emulating the LED array locally, it detects you do not have any of the adafruit modules installed and fails over to virtual mode.  To synchronously pause your event loop when animating use the `matrix.delay()` function.  This will ensure your rendering window stays open while waiting.
 
-If you want use this outside of the effects directory import the `Matrix` class.  If you building inside an [effect](effects/README.md) this is already been done for you and passed to your `run()` function.
+If you want use this outside of the effects directory import the `Matrix` class.  If you are building inside an [effect](effects/README.md) this is already been done for you and passed to your `run()` function.
 
 
 ```python

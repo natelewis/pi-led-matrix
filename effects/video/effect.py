@@ -7,6 +7,7 @@ framerate = 0.3 # in seconds
 usage = "Usage: ./run.sh video video-file.mp4"
 
 def run(matrix, config):
+    """play video file"""
     effect_dir = config['effect_dir']
     pixel_width = config['pixel_width']
     pixel_height = config['pixel_height']
