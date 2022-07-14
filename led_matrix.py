@@ -6,6 +6,8 @@ from config import (
     contrast,
     color,
     virtual_framerate,
+    playlist,
+    playlist_delay,
 )
 import cv2
 import numpy as np
@@ -26,6 +28,8 @@ except ImportError:
 pixel_pin = board.D18 if not VIRTUAL_ENV else 0
 pixel_width = pixel_width
 pixel_height = pixel_height
+playlist = playlist
+playlist_delay = playlist_delay
 
 def delay(ms):
     cv2.waitKey(ms)

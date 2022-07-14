@@ -7,8 +7,10 @@ sys.path.insert(0, effect_dir)
 print("starting " + effect_module)
 import effect
 matrix = Matrix()
+
 effect.run(matrix, {
     'pixel_height': pixel_height,
     'pixel_width': pixel_width,
     'effect_dir': effect_dir,
+    'argv': sys.argv[2:],
 })

@@ -11,18 +11,16 @@ def run(matrix, config):
     effect_dir = config['effect_dir']
     pixel_width = config['pixel_width']
     pixel_height = config['pixel_height']
-    sys.argv.pop(0) # remove loader arg
-    if len(sys.argv) != 2:
+    if len(config['argv']) != 1:
         print(usage)
         sys.exit()
 
-    video_file = effect_dir + '/' + sys.argv[1]
+    video_file = effect_dir + '/' + config['argv'][0]
     if not exists(video_file):
         print("Error: file not found")
         print(usage)
         sys.exit()
 
-    print('opening video: ' )
     vidcap = cv2.VideoCapture(video_file)
 
     def getFrame(sec):

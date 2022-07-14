@@ -5,13 +5,12 @@ from os.path import exists
 def run(matrix, config):
     """show an png image"""
     effect_dir = config['effect_dir']
-    sys.argv.pop(0) # remove loader arg
     usage = "Usage: ./run.sh image image-name.png"
-    if len(sys.argv) != 2:
+    if len(config['argv']) != 1:
         print(usage)
         sys.exit()
 
-    image_file = effect_dir + '/' + sys.argv[1]
+    image_file = effect_dir + '/' + config['argv'][0]
     if not exists(image_file):
         print("Error: file not found")
         print(usage)
