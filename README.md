@@ -108,6 +108,16 @@ Custom effects are organized in the `effects` directory with the following struc
 The effects.py have a `run()` function that will be executed by the `run.sh` script.
 
 [View the effects list and usage details](effects/README.md)
+
+## Playlist
+
+Run a slide show of effects that run in random order with a delay between effects.
+
+```bash
+./playlist.sh
+```
+
+You can choose what effects are in the playlist and the delay in the `config.py`.
 # API
 
 When emulating the LED array locally, it detects you do not have any of the adafruit modules installed and fails over to virtual mode.  To synchronously pause your event loop when animating use the `matrix.delay()` function.  This will ensure your rendering window stays open while waiting.
