@@ -10,15 +10,17 @@ import random
 #
 def run(matrix, config):
     """ pong """
-    x = 4
-    y = 4
     x_vector = 1
     y_vector = 1
     x_min = 0
     y_min = 0
     x_max = config['pixel_width'] - 1
     y_max = config['pixel_height'] - 1
+    x = int(random.random() * x_max)
+    y = int(random.random() * y_max)
 
+    print(f"start at {x}, {y}")
+    
     matrix.fill(0, 0, 0)
     while True:
         prev_x = x
@@ -34,13 +36,5 @@ def run(matrix, config):
 
         matrix.pixel((x, y), (255,255,255), 1)
         matrix.pixel((prev_x, prev_y), (0, 0, 0,), 1)
-
-        """
-            # reset it to the top at random if ready
-            if y == -1:
-                x = int(random.random()*config['pixel_width'] - 1)
-                if int(random.random()*random_delay) == 0:
-                    y = 0
-        """
 
         matrix.show()
