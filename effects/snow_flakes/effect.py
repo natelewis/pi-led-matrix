@@ -49,6 +49,8 @@ def run(matrix, config):
             if y == -flake_height:
                 x = int(random.random()*config['pixel_width'] - 1)
                 if int(random.random()*random_delay) == 0:
+                    # TODO: check if another flake is close to me, and if so, skip until I'm alone
+                    # so flakes don't overlap
                     y = -flake_height + 1 # kicked off the flake
 
             snow_flakes[idx] = {'x': x, 'y': y }

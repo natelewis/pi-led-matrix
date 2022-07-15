@@ -54,8 +54,9 @@ def swapRgbToBgr(rgb_color):
 def sprite(self, sprite_map, start, color_map):
     for y, line in enumerate(sprite_map):
         for x, pixel in enumerate(line):
+            start_x, start_y = start
             if (pixel != ' '):
-                self.pixel((start[0] + x, start[1] + y), color_map[pixel])
+                self.pixel((start_x + x, start_y + y), color_map[pixel])
 
 class VirtualMatrix():
     def __init__(self):
@@ -91,6 +92,7 @@ class VirtualMatrix():
     def circle(self, center, radius, rgb_color, width):
         cv2.circle(self.frame, center, radius, swapRgbToBgr(rgb_color), width)
 
+    # TODO: support other cv2 fonts
     def text(self, text, start, scale, rgb_color, thickness, font = cv2.FONT_HERSHEY_PLAIN):
         cv2.putText(self.frame, text, start, font, scale, swapRgbToBgr(rgb_color), thickness, cv2.LINE_4)
 
@@ -148,6 +150,7 @@ class LiveMatrix():
         self.buff.image(img)
         self.buff.display()
 
+    # TODO: support other cv2 fonts
     def text(self, text, start, scale, rgb_color, thickness, font = cv2.FONT_HERSHEY_PLAIN):
         cv2.putText(self.frame, text, start, font, scale, rgb_color, thickness, cv2.LINE_4)
 

@@ -49,7 +49,7 @@ _   _   _   _ ...
  |_| |_| |_|
 ```
 
-1. Attach 5V power from the PSU to top of each strip in parallel
+1. Attach 5V power from the PSU to top of each strip in parallel ( every other one )
 
 2. Connect GPIO 18 of the RPi4 to the green LED wire
 
