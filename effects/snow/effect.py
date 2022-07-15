@@ -7,7 +7,7 @@ def run(matrix, config):
     random_delay = 10 # 1 in x chance of falling when reset to top
     snow_flakes = [{'y': -1, 'x': 0}]*snow_flake_count
     while True:
-        matrix.fill(0,0,0)
+        matrix.reset((0,0,0))
         for idx, _ in enumerate(snow_flakes):
             x, y = itemgetter('x', 'y')( snow_flakes[idx])
 
@@ -26,6 +26,6 @@ def run(matrix, config):
                     y = 0
 
             snow_flakes[idx] = {'x': x, 'y': y }
-            matrix.pixel((x, y), (255,255,255), 1)
+            matrix.pixel((x, y), (255,255,255))
 
         matrix.show()

@@ -3,14 +3,14 @@
 def run(matrix, config):
     """red, green, blue, repeat"""
     while True:
-        matrix.fill(255, 0, 0)
+        matrix.reset((255, 0, 0))
         matrix.show()
         matrix.delay(1000)
 
-        matrix.fill(0, 255, 0)
+        matrix.reset((0, 255, 0))
         matrix.show()
         matrix.delay(1000)
 
-        matrix.fill(0, 0, 255)
+        matrix.reset((0, 0, 255))
         matrix.show()
         matrix.delay(1000)

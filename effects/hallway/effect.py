@@ -15,7 +15,7 @@ def run(matrix, config):
 	"""hallway coming towards you"""
 	wall_offsets = [0, 10, 20, 30]
 	while True:
-			matrix.fill(0,0,0)
+			matrix.reset((0,0,0))
 			for idx, offset in enumerate(wall_offsets):
 				offset = offset + 1
 				if offset > config['pixel_height']:

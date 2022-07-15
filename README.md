@@ -1,11 +1,11 @@
 # Raspberry Pi LED Matrix
 
-This is a collection of examples and an LED matrix library to simplify driving a LED matrix of any size created with WS2812B LED strips.  To tinker locally without a LED matrix, the library will detect you are not in the live environment and render the matrix in a window on your local machine.
+This is LED matrix library that simplifies driving a LED matrix of any size created with WS2812B LED strips.  It also is a virtual LED matrix you can use to help create effects, and animations without the need for a physical matrix.  When running effects you can execute them individually, or in a random playlist.
 ### Virtual Environment 60x30 Example
 https://user-images.githubusercontent.com/1588877/177685586-e4cb158d-c840-4b89-855e-5bfd087991b5.mp4
 
 
-### Live LED Matrix 60x30 Example
+### Physical LED Matrix 60x30 Example
 https://user-images.githubusercontent.com/1588877/177685583-cab5ac70-1f26-48f9-ab31-55bf0a61bf8d.mp4
 
 ## Virtual environment quick start
@@ -19,9 +19,9 @@ python3 test.py
 # Red, blue, green... in a tiny 60x30 window
 ```
 
-## Live LED Matrix Hardware
+## LED Matrix Hardware
 
-Here is the high level construction details of a LED matrix panel.
+High level construction details of a LED matrix panel.
 
 Shopping List:
 
@@ -130,7 +130,7 @@ from led_matrix import Matrix
 matrix = Matrix()
 
 # draw some random things to show how this works
-matrix.fill(0,0,0) # black background
+matrix.reset((0, 0, 0)) # black background
 matrix.line((0, 0), (60, 30), (255, 0, 0),  1) # diagonal red line
 matrix.rectangle((5, 5), (55, 25), (0, 255, 0),  1) # green rectangle
 matrix.circle((30, 15), 10, (0, 0, 255),  2) # blue circle
@@ -167,17 +167,17 @@ matrix.delay(1000 * 60) # 1 minute
 
 <br/>
 
-`matrix.fill(r, g, b)`
+`matrix.reset((r, g, b))`
 
 ---
 
-Fill all the pixels with the RGB values given.
+Reset all the pixels on the matrix to the RGB value given.
 
 ```python
-matrix.fill(255, 0 , 0) # all LEDs red
+matrix.reset((255, 0 , 0)) # all LEDs red
 matrix.show()
 matrix.delay(5000)
-matrix.fill(0, 0, 0) # turn off all LEDs
+matrix.reset((0, 0, 0)) # turn off all LEDs
 matrix.show()
 ```
 
@@ -213,7 +213,7 @@ matrix.delay(5000)
 
 <br/>
 
-`matrix.pixel((x,y), (r, g, b), width)`
+`matrix.pixel((x,y), (r, g, b))`
 
 ---
 
@@ -248,11 +248,50 @@ matrix.delay(5000)
 Paint the current image to the LEDs
 
 ```python
-matrix.fill(0, 0, 255)
+matrix.reset((0, 0, 255))
 matrix.show() # turn all LEDs blue
 matrix.delay(1000)
-matrix.fill(0, 0, 0)
+matrix.reset((0, 0, 0))
 matrix.show() # turn off all LEDs
+
+```
+
+<br/>
+
+`matrix.sprite(sprite_map, start, color_map)`
+
+---
+
+Draw a custom sprite of any size on the matrix, where the upper left corner is the starting coordinates.
+
+```python
+# smiley face with a blue nose, green eyes and red smile in the upper hand corner of the matrix
+matrix.sprite(
+    ([  [' ', ' ', ' ', ' ', ' '],
+
+        ['1', '1', ' ', '1', '1'],
+
+        ['1', '1', ' ', '1', '1'],
+
+        [' ', ' ', ' ', ' ', ' '],
+
+        [' ', ' ', 'o', ' ', ' '],
+
+        [' ', ' ', 'o', ' ', ' '],
+
+        ['x', ' ', ' ', ' ', 'x'],
+
+        [' ', 'x', 'x', 'x', ' '],
+
+        [' ', ' ', ' ', ' ', ' ']]),
+    (0, 0),
+    {
+        '1': (0, 255, 0), # 1's are green
+        'x': (255, 0, 0), # x's are read
+        'o': (0, 0, 255), # o's are blue
+    })
+matrix.show()
+matrix.delay(10000)
 
 ```
 
