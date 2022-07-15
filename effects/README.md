@@ -1,7 +1,7 @@
 
 # Raspberry Pi LED Matrix Effects
 
-List of current contributed effects that can be run.  They can be loaded be ran individually with the `run.sh` script:
+List of current contributed effects that can be run.  They can be loaded and ran individually with the `run.sh` script:
 
 ```bash
 ./run.sh effect_name
@@ -22,11 +22,11 @@ To make a new effect, just copy an existing effect directory that might have som
 
 ## hallway
 
-Effect of moving down a hallway
+Effect of moving down a hallway.
 
 ## image image.png
 
-Resize the image in any graphic editor to the size of the matrix and save it as a PNG.  Place image in the image effect directory.
+Resize the image in any graphic editor to the size of the matrix and save it as a PNG.  Place image in the `image` effect directory.
 
 ## marquee
 
@@ -34,7 +34,7 @@ This currently is set for matrix's at 60x30, and in red.  Change the settings in
 
 ## off
 
-Simple effect that sets all lights to black
+Simple effect that sets all lights to black.
 
 ## snow
 
@@ -42,7 +42,7 @@ Simple snow effect.
 
 ## snow_flakes
 
-Complex snow flakes using animated sprites and shimmering brightness
+Complex snow flakes using animated sprites and shimmering brightness.
 
 ## rgb_test
 
@@ -50,13 +50,13 @@ Test that checks your RGB configuration.  Red... Blue... Green... (repeat)
 
 ## video filename.mp4
 
-To play a video first resize the video before playing with `ffmpeg` to the size of your matrix:
+To play a video, first resize the video with `ffmpeg` to the size of your matrix:
 
 ```bash
 ffmpeg -i filename.mp4 -vf scale=60:30 filename-60x30.mp4
 ```
 
-To play the video on the matrix with the `mp4` file copied to the video effect directory
+Copy the video to the `video` effect directory to play.
 
 ## water_ripple
 
