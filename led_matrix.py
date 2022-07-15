@@ -1,3 +1,6 @@
+import cv2
+import numpy as np
+
 from PIL import ImageEnhance, Image
 from config import (
     pixel_width,
@@ -9,8 +12,6 @@ from config import (
     playlist,
     playlist_delay,
 )
-import cv2
-import numpy as np
 
 # config and mapping for virtual env vs pi with LED matrix
 # Virtual env only works if it is a constant event loop
