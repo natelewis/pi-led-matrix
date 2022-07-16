@@ -10,7 +10,7 @@ def run(matrix, config):
 	"""water rippling outwards"""
 	rings = [0, 10, 20, 30]
 	while True:
-			matrix.reset((0,0,0))
+			matrix.reset()
 			for idx, x in enumerate(rings):
 				x = x + 1
 				if x > 40:

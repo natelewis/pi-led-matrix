@@ -21,7 +21,7 @@ def run(matrix, config):
 
     def display_text(x, y):
         y = (10 * font_scaling) + top_padding
-        matrix.reset((0,0,0))
+        matrix.reset()
         matrix.text(message, (x, y), font_scaling, font_color, font_thickness)
         matrix.show()
 

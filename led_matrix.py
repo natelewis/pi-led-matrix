@@ -61,7 +61,7 @@ def sprite(self, sprite_map, start, color_map):
 class VirtualMatrix():
     def __init__(self):
         self.current_rendering = False
-        self.reset((0, 0, 0))
+        self.reset()
 
     def image(self, img):
         rgb_image = img.convert("RGB");
@@ -74,7 +74,7 @@ class VirtualMatrix():
         # without this there is no rendering
         cv2.waitKey(virtual_framerate)
 
-    def reset(self, rgb_color):
+    def reset(self, rgb_color = (0, 0, 0)):
         self.frame = reset(rgb_color)
 
     def delay(self, ms):
@@ -110,7 +110,7 @@ def pixels():
 
 class LiveMatrix():
     def __init__(self):
-        self.frame = reset((0, 0, 0))
+        self.frame = reset()
         neopixel = pixels()
         self.buff = PixelFramebuffer(
             neopixel,
@@ -120,7 +120,7 @@ class LiveMatrix():
         )
 
 
-    def reset(self, rgb_color):
+    def reset(self, rgb_color = (0, 0, 0)):
         self.frame = reset(rgb_color)
 
     def image(self, img):
