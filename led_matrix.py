@@ -64,7 +64,7 @@ def text(self, message, start, font_size, rgb_color, ttf_file):
     image = Image.fromarray(self.frame)
     draw = ImageDraw.Draw(image)
     font = ImageFont.truetype('./fonts/' + ttf_file, font_size)
-    draw.text(start, message, font = font, fill = (swapRgbToBgr(rgb_color)))
+    draw.text(start, message, font = font, fill = (rgb_color))
     self.image(image)
 
 class VirtualMatrix():
@@ -102,7 +102,7 @@ class VirtualMatrix():
         cv2.circle(self.frame, center, radius, swapRgbToBgr(rgb_color), width)
 
     def text(self, message, start, font_size, rgb_color, font = 'dosis.ttf'):
-        text(self, message, start, font_size, rgb_color, font)
+        text(self, message, start, font_size, swapRgbToBgr(rgb_color), font)
 
     def sprite(self, sprite_map, start, color_map):
         sprite(self, sprite_map, start, color_map)
