@@ -110,7 +110,7 @@ def pixels():
 
 class LiveMatrix():
     def __init__(self):
-        self.frame = reset()
+        self.reset()
         neopixel = pixels()
         self.buff = PixelFramebuffer(
             neopixel,
