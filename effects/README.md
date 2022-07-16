@@ -26,11 +26,19 @@ Effect of moving down a hallway.
 
 ## image image.png
 
-Resize the image in any graphic editor to the size of the matrix and save it as a PNG.  Place image in the `image` effect directory.
+Resize the image in any graphic editor to the size of the matrix and save it as a PNG.  Place image in the `image` effect directory.  Fonts usually have some padding and such, so you sometimes have to adjust for that on the 'y' settings.
 
 ## marquee
 
-This currently is set for matrix's at 60x30, and in red.  Change the settings in the effect script to alter.
+Passing sets of definition can create any type of marquee.
+```
+# ./run.sh marquee left_padding right_padding r g b "my message" ..repeat'
+# example of:
+#     The
+#        Beverly
+# ./run.sh marquee 0 -5 0 0 255 'The' 25 9 0 0 255 'Beverly'
+# notice the -5 for the first `y`.  This subtracts some padding the default font has.
+```
 
 ## off
 
