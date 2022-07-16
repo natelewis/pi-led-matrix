@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-from PIL import ImageEnhance, Image
+from PIL import ImageEnhance, Image, ImageDraw, ImageFont
 from config import (
     pixel_width,
     pixel_height,
@@ -32,6 +32,8 @@ pixel_height = pixel_height
 playlist = playlist
 playlist_delay = playlist_delay
 
+RGB = 'RGB'
+
 def delay(ms):
     cv2.waitKey(ms)
 
@@ -40,7 +42,7 @@ def reset(rgb_color):
     return np.full([pixel_height, pixel_width, 3],[b, g, r], np.uint8)
 
 def enhance(image):
-    rgb_image = Image.fromarray(image, mode="RGB")
+    rgb_image = Image.fromarray(image, mode=RGB)
     color_enhance = ImageEnhance.Color(rgb_image)
     colored_image = color_enhance.enhance(color)
     contrast_enhancer = ImageEnhance.Contrast(colored_image)
@@ -58,13 +60,20 @@ def sprite(self, sprite_map, start, color_map):
             if (pixel != ' '):
                 self.pixel((start_x + x, start_y + y), color_map[pixel])
 
+def text(self, message, start, font_size, rgb_color, ttf_file):
+    image = Image.fromarray(self.frame)
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.truetype('./fonts/' + ttf_file, font_size)
+    draw.text(start, message, font = font, fill = (swapRgbToBgr(rgb_color)))
+    self.image(image)
+
 class VirtualMatrix():
     def __init__(self):
         self.current_rendering = False
         self.reset()
 
     def image(self, img):
-        rgb_image = img.convert("RGB");
+        rgb_image = img.convert(RGB);
         self.frame = np.array(rgb_image)
 
     def show(self):
@@ -92,9 +101,8 @@ class VirtualMatrix():
     def circle(self, center, radius, rgb_color, width):
         cv2.circle(self.frame, center, radius, swapRgbToBgr(rgb_color), width)
 
-    # TODO: support other cv2 fonts
-    def text(self, text, start, scale, rgb_color, thickness, font = cv2.FONT_HERSHEY_PLAIN):
-        cv2.putText(self.frame, text, start, font, scale, swapRgbToBgr(rgb_color), thickness, cv2.LINE_4)
+    def text(self, message, start, font_size, rgb_color, font = 'dosis.ttf'):
+        text(self, message, start, font_size, rgb_color, font)
 
     def sprite(self, sprite_map, start, color_map):
         sprite(self, sprite_map, start, color_map)
@@ -124,7 +132,7 @@ class LiveMatrix():
         self.frame = reset(rgb_color)
 
     def image(self, img):
-        rgb_image = img.convert("RGB");
+        rgb_image = img.convert(RGB);
         self.frame = np.array(rgb_image)
 
     def line(self, start, end, rgb_color, width):
@@ -146,13 +154,12 @@ class LiveMatrix():
         sprite(self, sprite_map, start, color_map)
 
     def show(self):
-        img = Image.fromarray(enhance(self.frame), mode="RGB")
+        img = Image.fromarray(enhance(self.frame), mode=RGB)
         self.buff.image(img)
         self.buff.display()
 
-    # TODO: support other cv2 fonts
-    def text(self, text, start, scale, rgb_color, thickness, font = cv2.FONT_HERSHEY_PLAIN):
-        cv2.putText(self.frame, text, start, font, scale, rgb_color, thickness, cv2.LINE_4)
+    def text(self, message, start, font_size, rgb_color, font = 'dosis.ttf'):
+        text(self, message, start, font_size, rgb_color, font)
 
 def Matrix():
     if not VIRTUAL_ENV:

@@ -171,18 +171,18 @@ matrix.delay(1000 * 60) # 1 minute
 
 <br/>
 
-`matrix.reset((r, g, b))`
+`matrix.frame`
 
 ---
 
-Reset all the pixels on the matrix to the RGB value given.  If no value is given it will default to all black (0, 0, 0).
+Access to the numpy array that contains the matrix values.  This can be manipulated, or tested against.
 
 ```python
-matrix.reset((255, 0 , 0)) # all LEDs red
-matrix.show()
-matrix.delay(5000)
-matrix.reset() # turn off all LEDs -- same as matrix.reset((0, 0, 0))
-matrix.show()
+import numpy as np
+
+def is_it_off:
+    # check if all values are 0's
+    return np.all(matrix.frame==0)
 ```
 
 <br/>
@@ -245,6 +245,22 @@ matrix.delay(5000)
 
 <br/>
 
+`matrix.reset((r, g, b))`
+
+---
+
+Reset all the pixels on the matrix to the RGB value given.  If no value is given it will default to all black (0, 0, 0).
+
+```python
+matrix.reset((255, 0 , 0)) # all LEDs red
+matrix.show()
+matrix.delay(5000)
+matrix.reset() # turn off all LEDs -- same as matrix.reset((0, 0, 0))
+matrix.show()
+```
+
+<br/>
+
 `matrix.show()`
 
 ---
@@ -301,14 +317,17 @@ matrix.delay(10000)
 
 <br/>
 
-`matrix.text(self, text, start, scale, color, thickness)`
+`matrix.text(self, text, start, font_size, color, ttf_font_file)`
 
 ---
 
-Place text at the given location. ( font selection is currently disabled )
+Place the upper left point of the text at a given location. Custom font files should be placed in the `./fonts/` directory, and can be any ttf file.  The default font is used if none is passed.
 
 ```python
-matrix.text('hello', (10,20), 1, (255,0,0), 1)
+matrix.text('hello', (10,20), 16, (255,0,0))
+matrix.show()
+matrix.delay(5000)
+matrix.text('hello', (10,20), 16, (255,0,0), 'custom.ttf')
 matrix.show()
 matrix.delay(5000)
 ```
