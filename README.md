@@ -15,6 +15,7 @@ git clone git@github.com:natelewis/pi-led-matrix-playground.git
 cd pi-led-matrix-playground
 pip3 install opencv-python
 pip3 install -U numpy
+pip3 install pillow
 python3 test.py
 # Red, blue, green... in a tiny 60x30 window
 ```
