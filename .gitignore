@@ -1,6 +1,7 @@
-__pycache__
+_*
 *.mp4
 *.png
 ._*
 .DS_Store
 test.py
+local_*

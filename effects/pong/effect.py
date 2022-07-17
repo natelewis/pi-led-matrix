@@ -20,8 +20,8 @@ def run(matrix, config):
     y = int(random.random() * y_max)
 
     print(f"start at {x}, {y}")
-    
-    matrix.fill(0, 0, 0)
+
+    matrix.reset()
     while True:
         prev_x = x
         prev_y = y
@@ -34,7 +34,7 @@ def run(matrix, config):
         x += x_vector
         y += y_vector
 
-        matrix.pixel((x, y), (255,255,255), 1)
-        matrix.pixel((prev_x, prev_y), (0, 0, 0,), 1)
+        matrix.pixel((x, y), (255,255,255))
+        matrix.pixel((prev_x, prev_y), (0, 0, 0,))
 
         matrix.show()
