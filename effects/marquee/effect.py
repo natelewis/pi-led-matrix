@@ -2,14 +2,13 @@ import sys
 import numpy as np
 
 # marquee
-delay = 1 # in ms
-
-usage = 'Usage: ./run.sh marquee left_padding right_padding r g b "my message" ..repeat'
+DELAY = 1 # in ms
+USAGE = 'Usage: ./run.sh marquee left_padding right_padding r g b "my message" ..repeat'
 
 def run(matrix, config):
     """scroll large marquee text"""# remove loader arg
     if len(config['argv']) % 6:
-        print(usage)
+        print(USAGE)
         sys.exit()
 
     line_count = len(config['argv']) / 6
@@ -50,7 +49,7 @@ def run(matrix, config):
         if not np.all(matrix.frame == 0):
 
             matrix.show()
-            matrix.delay(delay)
+            matrix.delay(DELAY)
             reset_in_progress = False
         else:
             if not reset_in_progress:

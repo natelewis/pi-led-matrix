@@ -3,5 +3,19 @@
 		{
 			"path": "."
 		}
-	]
+	],
+	"settings": {
+		"python.analysis.diagnosticSeverityOverrides": {
+			"reportMissingImports": "none",
+		},
+		"cSpell.words": [
+			"adafruit",
+			"dosis",
+			"framebuf",
+			"Framebuffer",
+			"fromarray",
+			"imshow",
+			"neopixel"
+		]
+	}
 }
