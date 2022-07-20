@@ -30,19 +30,19 @@ def run(matrix, config):
     if y == 0 or y == y_max:
         y = 1
 
+    # Draw top and bottom walls
+    matrix.line((x_min, 0), (x_max, 0), (255, 255, 255), 1)
+    matrix.line((x_min, y_max), (x_max, y_max), (255, 255, 255), 1)
+
+    # Draw paddles
+    matrix.rectangle((2, left_paddle_y), (3, left_paddle_y + 5), (255, 255, 255), 1)
+    matrix.rectangle((x_max, right_paddle_y), (x_max + 1, right_paddle_y + 5), (255, 255, 255), 1)
+
     print(f"start at {x}, {y}")
 
-    def move_paddle(paddle_y, ball_y):
-        if ball_y > paddle_y + 3:
-            if paddle_y < y_max - 3:
-                return paddle_y + 1
-        else:
-            if paddle_y > 1:
-                return paddle_y - 1
-        return paddle_y
-
     while True:
-        matrix.reset()
+        prev_x = x
+        prev_y = y
 
         if x + x_vector <= x_min or x + x_vector >= x_max:
             x_vector *= -1
@@ -53,21 +53,17 @@ def run(matrix, config):
         y += y_vector
 
         # Move paddles to meet the ball
-        if x <= x_min + 15:
-            left_paddle_y = move_paddle(left_paddle_y, y)
+        if x <= x_min + 10:
+            matrix.rectangle((2, left_paddle_y), (3, left_paddle_y + 5), (0 ,0 ,0), 1)
+            left_paddle_y = y - 2
+            matrix.rectangle((2, left_paddle_y), (3, left_paddle_y + 5), (255, 255, 255), 1)
 
-        if x >= x_max - 15:
-            right_paddle_y = move_paddle(right_paddle_y, y)
+        if x >= x_max - 10:
+            matrix.rectangle((x_max, right_paddle_y), (x_max + 1, right_paddle_y + 5), (0, 0, 0), 1)
+            right_paddle_y = y - 2
+            matrix.rectangle((x_max, right_paddle_y), (x_max + 1, right_paddle_y + 5), (255, 255, 255), 1)
 
-        # Draw top and bottom walls
-        matrix.line((x_min, 0), (x_max, 0), (255, 255, 255), 1)
-        matrix.line((x_min, y_max), (x_max, y_max), (255, 255, 255), 1)
-
-        # Draw paddles
-        matrix.rectangle((2, left_paddle_y), (3, left_paddle_y + 5), (255, 255, 255), 1)
-        matrix.rectangle((x_max, right_paddle_y), (x_max + 1, right_paddle_y + 5), (255, 255, 255), 1)
-
-        # Draw ball
         matrix.pixel((x, y), (255, 255, 255))
+        matrix.pixel((prev_x, prev_y), (0, 0, 0))
 
         matrix.show()
