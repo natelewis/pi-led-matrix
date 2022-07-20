@@ -12,7 +12,7 @@ import random
 #
 def run(matrix, config):
     """ pong """
-    paddle_height = 5
+    paddle_height = 5 # should always be an odd number
 
     x_vector = 1
     y_vector = 1
@@ -20,10 +20,10 @@ def run(matrix, config):
     y_min = 0
     x_max = config['pixel_width'] - 4
     y_max = config['pixel_height'] - 1
-    y_midpoint = int(y_max / 2)
+    y_midpoint = round(y_max / 2)
     x = int(random.random() * x_max)
     y = int(random.random() * y_max)
-    paddle_midpoint = int(paddle_height / 2)
+    paddle_midpoint = int(paddle_height / 2) + 1
 
     # Paddles
     left_paddle_y = int(y_max / 2)
@@ -36,8 +36,8 @@ def run(matrix, config):
     print(f"start at {x}, {y}")
 
     def move_paddle(paddle_y, ball_y):
-        if ball_y > paddle_y + 3:
-            if paddle_y < y_max - 4:
+        if ball_y > paddle_y + paddle_midpoint:
+            if paddle_y < y_max - paddle_height - 1:
                 return paddle_y + 1
         else:
             if paddle_y > 1:
