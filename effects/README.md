@@ -44,6 +44,12 @@ Passing sets of definition can create any type of marquee.
 
 Simple effect that sets all lights to black.
 
+## pong
+
+Simulates a pong game
+
+https://user-images.githubusercontent.com/1588877/180089226-94fc8646-5f0d-4173-a96a-8605a65c4c78.mov
+
 ## snow
 
 Simple snow effect.
