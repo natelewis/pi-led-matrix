@@ -30,15 +30,21 @@ Resize the image in any graphic editor to the size of the matrix and save it as 
 
 ## marquee
 
-Passing sets of definition can create any type of marquee.
+Passing json definitions can create any type of marquee.
 ```
-# ./run.sh marquee left_padding right_padding r g b "my message" ..repeat'
+# ./run.sh marquee  '{ "messages": [{ "left": 10, "right": 5, "r": 255, "g": 255, "b": 255, "message": "my message", "font": "dosis.ttf"}]}'
 # example of:
 #     The
 #        Beverly
-# ./run.sh marquee 0 -5 0 0 255 'The' 25 9 0 0 255 'Beverly'
-# notice the -5 for the first `y`.  This subtracts some padding the default font has.
+# ./run.sh marquee '{"messages": [{"left": 0, "right": 0, "r": 0, "g": 0, "b": 255, "message": "The", "font": "dosis.ttf"}, {"left": 25, "right": 9, "r": 0, "g": 0, "b": 255, "message": "Beverly", "font": "dosis.ttf"}]}'
+# notice the -5 for the first `y`.  This offsets the font because of some top padding the font has.
 ```
+
+https://user-images.githubusercontent.com/1588877/180103974-6579da59-469b-4a1d-952b-508631e22fd3.mov
+
+Or with a fancier font:
+
+https://user-images.githubusercontent.com/1588877/180108937-b5a49bbd-d0af-445e-bcce-64446570fc11.mov
 
 ## off
 
