@@ -2,6 +2,7 @@ import cv2
 import random
 import numpy as np
 
+from lib import colors
 from PIL import ImageEnhance, Image, ImageDraw, ImageFont
 from config import (
     PIXEL_WIDTH,
@@ -78,6 +79,9 @@ class VirtualMatrix():
         self.frame = []
         self.reset()
 
+    def color(self, color_name):
+        return colors.MAP[color_name]
+
     def random_color(self):
         return random_color()
 
@@ -137,6 +141,9 @@ class LiveMatrix():
             pixel_height,
             orientation=VERTICAL
         )
+
+    def color(self, color_name):
+        return colors.MAP[color_name]
 
     def random_color(self):
         return random_color()
