@@ -1,53 +1,52 @@
 import sys
+import json
 import numpy as np
 
 # marquee
 DELAY = 1 # in ms
-USAGE = 'Usage: ./run.sh marquee left_padding right_padding r g b "my message" ..repeat'
+USAGE = 'Usage: ./run.sh marquee \'{ "messages": [{ "left": 0, "right": 5, "r": 255, "g": 255, "b": 255, "message": "my message", "font": "optional_font.ttf"}]}\''
 
 def run(matrix, config):
     """scroll large marquee text"""# remove loader arg
-    if len(config['argv']) % 6:
+    if len(config['argv']) != 1:
         print(USAGE)
         sys.exit()
 
-    line_count = len(config['argv']) / 6
+    data = json.loads(config['argv'][0])
 
-    # reshape and clean up data
-    mmm = np.reshape(config['argv'], ( int(line_count), 6))
     messages = []
-    for idx, m in enumerate(mmm):
+    for m in data['messages']:
         messages.append([
-            int(m[0]) + config['pixel_width'],
-            int(m[1]),
-            int(m[2]),
-            int(m[3]),
-            int(m[4]),
-            m[5]
+            m['left'] + config['pixel_width'],
+            m['right'],
+            m['r'],
+            m['g'],
+            m['b'],
+            m['message'],
+            m['font']
         ])
 
     original_messages = messages.copy()
     reset_in_progress = False
 
-    def display_text(x, y, text, font_color):
-        matrix.text(text, (x, y), 16, font_color)
+    def display_text(x, y, text, font_color, font):
+        matrix.text(text, (x, y), 16, font_color, font)
 
     while True:
         matrix.reset()
         for idx, message in enumerate(messages):
-            x, y, r, g, b, text = message
+            x, y, r, g, b, text, font = message
             x = int(x)
             y = int(y)
             r = int(r)
             g = int(g)
             b = int(b)
             x = x - 1
-            display_text(x, y, text, (r, g, b))
-            messages[idx] = [x, y, r, g, b, text]
+            display_text(x, y, text, (r, g, b), font)
+            messages[idx] = [x, y, r, g, b, text, font]
 
         # skip frames that have no pixels lit up
         if not np.all(matrix.frame == 0):
-
             matrix.show()
             matrix.delay(DELAY)
             reset_in_progress = False

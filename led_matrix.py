@@ -1,4 +1,5 @@
 import cv2
+import random
 import numpy as np
 
 from PIL import ImageEnhance, Image, ImageDraw, ImageFont
@@ -16,6 +17,8 @@ from config import (
 # config and mapping for virtual env vs pi with LED matrix
 # Virtual env only works if it is a constant event loop
 VIRTUAL_ENV = False
+
+VIRTUAL_SIZE_MULTIPLIER = 10
 
 try:
     # live env
@@ -68,17 +71,23 @@ def text(self, message, start, font_size, rgb_color, ttf_file):
     draw.text(start, message, font = font, fill = (rgb_color))
     self.image(image)
 
+def random_color():
+    return (random.randrange(255), random.randrange(255), random.randrange(255))
 class VirtualMatrix():
     def __init__(self):
         self.frame = []
         self.reset()
+
+    def random_color(self):
+        return random_color()
 
     def image(self, img):
         rgb_image = img.convert(RGB)
         self.frame = np.array(rgb_image)
 
     def show(self):
-        cv2.imshow('LED matrix', enhance(self.frame))
+        frame = cv2.resize(self.frame, (PIXEL_WIDTH * VIRTUAL_SIZE_MULTIPLIER, PIXEL_HEIGHT * VIRTUAL_SIZE_MULTIPLIER))
+        cv2.imshow('LED matrix', enhance(frame))
 
         # this is the magic sauce -- waitKey runs all the cv2 handlers behind the scene
         # without this there is no rendering
@@ -128,6 +137,9 @@ class LiveMatrix():
             pixel_height,
             orientation=VERTICAL
         )
+
+    def random_color(self):
+        return random_color()
 
     def reset(self, rgb_color = (0, 0, 0)):
         self.frame = reset(rgb_color)

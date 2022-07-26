@@ -232,6 +232,19 @@ matrix.delay(5000)
 
 <br/>
 
+`matrix.random_color()`
+
+---
+
+Return a random color
+
+```python
+matrix.line((0, 0), (60, 30), matrix.random_color(),  1) # random colored line
+matrix.show()
+matrix.delay(5000)
+```
+
+<br/>
 `matrix.rectangle((x,y), (x,y), (r, g, b), width)`
 
 ---
