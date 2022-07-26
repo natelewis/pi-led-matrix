@@ -159,6 +159,21 @@ matrix.delay(5000)
 
 <br/>
 
+`matrix.color(css_color_name)`
+
+---
+
+Return the color for any standard [css color name](https://www.w3.org/wiki/CSS/Properties/color/keywords).
+
+
+```python
+matrix.reset(matrix.color('fuchsia')) # paint led's fuchsia (255, 0, 255)
+matrix.show()
+matrix.delay(5000)
+```
+
+<br/>
+
 `matrix.delay(ms)`
 
 ---
