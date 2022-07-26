@@ -40,7 +40,7 @@ def run(matrix, config):
 			particle['y'] += particle['dy']
 			particle['psize'] -= FIZZLE_OUT
 			particle['dy'] += GRAVITY_PULL
-			pcolor = (random.randrange(255), random.randrange(255), random.randrange(255))
+			pcolor = matrix.random_color()
 
 			if particle['psize'] <= 0:
 				# Particle fizzled out

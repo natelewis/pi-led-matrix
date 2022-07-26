@@ -37,7 +37,7 @@ def run(matrix, config):
             x_vector = 1
         if y_vector == 0:
             y_vector = 1
-        color = (random.randrange(256), random.randrange(256), random.randrange(256))
+        color = matrix.random_color()
         all_balls.append({'x': x, 'y': y, 'x_vector': x_vector, 'y_vector': y_vector, 'color': color})
 
     while True:
