@@ -1,23 +1,24 @@
 # Raspberry Pi LED Matrix
 
-This is LED matrix library that simplifies driving a LED matrix of any size created with WS2812B LED strips.  It also is a virtual LED matrix you can use to help create effects, and animations without the need for a physical matrix.  When running effects you can execute them individually, or in a random playlist.
-### Virtual Environment 60x30 Example
+This is a LED matrix library that simplifies driving a LED matrix of any size created with WS2812B LED strips.  It also is a virtual LED matrix simulator you can use to help create effects, and animations without the need for a physical matrix.  When running effects you can execute them individually, or in a random playlist.
+### Virtual Environment Simulator 60x30 Example
 https://user-images.githubusercontent.com/1588877/177685586-e4cb158d-c840-4b89-855e-5bfd087991b5.mp4
 
 
 ### Physical LED Matrix 60x30 Example
 https://user-images.githubusercontent.com/1588877/177685583-cab5ac70-1f26-48f9-ab31-55bf0a61bf8d.mp4
 
-## Virtual environment quick start
+## Virtual Environment Quick Start
 
 ```bash
 git clone git@github.com:natelewis/pi-led-matrix-playground.git
 cd pi-led-matrix-playground
-pip3 install opencv-python
-pip3 install -U numpy
-pip3 install pillow
-python3 test.py
-# Red, blue, green... in a tiny 60x30 window
+python3 -m virtualenv venv
+source venv/bin/activate
+pip3 install opencv-python numpy pillow
+./run.sh rgb_test
+# Red, blue, green... in a 600x300 window
+# ctl-c to stop script
 ```
 
 ## LED Matrix Hardware
@@ -40,15 +41,15 @@ In this example I built a 60x30 array with 5V 300W 60A power supply, which is pl
 1. Collect a 60 count of 30 LED per meter 1M strips
 2. Build the matrix in a chain pattern:
 
-```text
-_   _   _   _ ...
- | | | | | |
- | | | | | |
- | | | | | |
- | | | | | |
- | | | | | |
- |_| |_| |_|
-```
+    ```text
+    _   _   _   _ ...
+    | | | | | |
+    | | | | | |
+    | | | | | |
+    | | | | | |
+    | | | | | |
+    |_| |_| |_|
+    ```
 
 1. Attach 5V power from the PSU to top of each strip in parallel ( every other one )
 
@@ -69,15 +70,16 @@ _   _   _   _ ...
 
 3. Execute the following to globally install libraries and dependencies:
 
-```bash
-sudo apt update
-sudo apt install -y ffmpeg libatlas-base-dev
-sudo pip3 install --upgrade adafruit-python-shell opencv-python rpi_ws281x adafruit-circuitpython-neopixel numpy adafruit_pixel_framebuf
-wget https://raw.githubusercontent.com/adafruit/Raspberry-Pi-Installer-Scripts/master/raspi-blinka.py
-sudo python3 raspi-blinka.py
-```
+    ```bash
+    sudo apt update
+    sudo apt install -y ffmpeg libatlas-base-dev
+    sudo pip3 install --upgrade adafruit-python-shell opencv-python rpi_ws281x adafruit-circuitpython-neopixel numpy adafruit_pixel_framebuf
+    wget https://raw.githubusercontent.com/adafruit/Raspberry-Pi-Installer-Scripts/master/raspi-blinka.py
+    sudo python3 raspi-blinka.py
+    copy default_config.json config.json
+    ```
 
-4. Update the `config.py` to adjust sizes if anything is different.
+4. Update the `config.json` to adjust sizes or values if anything is different.
 
 ## Testing your LED matrix
 
