@@ -1,3 +1,4 @@
+from os.path import exists
 import json
 import random
 import cv2
@@ -6,26 +7,28 @@ import numpy as np
 from PIL import ImageEnhance, Image, ImageDraw, ImageFont
 from .lib import colors
 
+CUSTOM_CONFIG = exists('config.json')
+CONFIG = 'default_config.json' if not CUSTOM_CONFIG else 'config.json'
 
-with open("default_config.json", mode="r") as j_object:
+with open(CONFIG, mode='r',  encoding='utf8') as j_object:
     cfg = json.load(j_object)
 
 # size of matrix
-pixel_width = cfg["pixel_width"]
-pixel_height = cfg["pixel_height"]
+pixel_width = cfg['pixel_width']
+pixel_height = cfg['pixel_height']
 
 # brightness 0 - 1
-brightness = cfg["brightness"]
+brightness = cfg['brightness']
 
 #contrast (1 is no change)
-contrast = cfg["contrast"]
+contrast = cfg['contrast']
 
 #color (1 is no change)
-color = cfg["color"]
+color = cfg['color']
 
 # framerate between renderings in milliseconds in virtual mode
 # this mimics the delay of hardware latency
-virtual_framerate = cfg["virtual_framerate"]
+virtual_framerate = cfg['virtual_framerate']
 
 # playlists follow this format:
 # [
@@ -34,8 +37,8 @@ virtual_framerate = cfg["virtual_framerate"]
 #    {'effect': 'snow', 'argv': []},
 #    {'effect': 'water_ripple', 'argv':[]},
 # ]
-playlist = cfg["playlist"]
-playlist_delay = cfg["playlist_delay"]
+playlist = cfg['playlist']
+playlist_delay = cfg['playlist_delay']
 
 # config and mapping for virtual env vs pi with LED matrix
 # Virtual env only works if it is a constant event loop
