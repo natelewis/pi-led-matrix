@@ -1,19 +1,45 @@
-import cv2
+from os.path import exists
+import json
 import random
+import cv2
 import numpy as np
 
 from lib import colors
 from PIL import ImageEnhance, Image, ImageDraw, ImageFont
-from config import (
-    PIXEL_WIDTH,
-    PIXEL_HEIGHT,
-    BRIGHTNESS,
-    CONTRAST,
-    COLOR,
-    VIRTUAL_FRAMERATE,
-    PLAYLIST,
-    PLAYLIST_DELAY,
-)
+from .lib import colors
+
+CUSTOM_CONFIG = exists('config.json')
+CONFIG = 'default_config.json' if not CUSTOM_CONFIG else 'config.json'
+
+with open(CONFIG, mode='r',  encoding='utf8') as j_object:
+    cfg = json.load(j_object)
+
+# size of matrix
+pixel_width = cfg['pixel_width']
+pixel_height = cfg['pixel_height']
+
+# brightness 0 - 1
+brightness = cfg['brightness']
+
+#contrast (1 is no change)
+contrast = cfg['contrast']
+
+#color (1 is no change)
+color = cfg['color']
+
+# framerate between renderings in milliseconds in virtual mode
+# this mimics the delay of hardware latency
+virtual_framerate = cfg['virtual_framerate']
+
+# playlists follow this format:
+# [
+#    {'effect': 'video', 'argv': ['cartoon-60x30.mp4']},
+#    {'effect': 'image', 'argv': ['josie-60x30.png']},
+#    {'effect': 'snow', 'argv': []},
+#    {'effect': 'water_ripple', 'argv':[]},
+# ]
+playlist = cfg['playlist']
+playlist_delay = cfg['playlist_delay']
 
 # config and mapping for virtual env vs pi with LED matrix
 # Virtual env only works if it is a constant event loop
@@ -31,12 +57,6 @@ except ImportError:
     VIRTUAL_ENV = True
 
 pixel_pin = board.D18 if not VIRTUAL_ENV else 0
-# re-assigning these so they can be exported
-pixel_width = PIXEL_WIDTH # pylint: disable=self-assigning-variable,invalid-name
-pixel_height = PIXEL_HEIGHT # pylint: disable=self-assigning-variable,invalid-name
-playlist = PLAYLIST # pylint: disable=self-assigning-variable,invalid-name
-playlist_delay = PLAYLIST_DELAY # pylint: disable=self-assigning-variable,invalid-name
-
 RGB = 'RGB'
 
 def delay(ms):
@@ -49,9 +69,9 @@ def reset(rgb_color):
 def enhance(image):
     rgb_image = Image.fromarray(image, mode=RGB)
     color_enhance = ImageEnhance.Color(rgb_image)
-    colored_image = color_enhance.enhance(COLOR)
+    colored_image = color_enhance.enhance(color)
     contrast_enhancer = ImageEnhance.Contrast(colored_image)
-    contrasted_image =  contrast_enhancer.enhance(CONTRAST)
+    contrasted_image =  contrast_enhancer.enhance(contrast)
     return np.array(contrasted_image)
 
 def swap_rgb_to_bgr(rgb_color):
@@ -90,12 +110,12 @@ class VirtualMatrix():
         self.frame = np.array(rgb_image)
 
     def show(self):
-        frame = cv2.resize(self.frame, (PIXEL_WIDTH * VIRTUAL_SIZE_MULTIPLIER, PIXEL_HEIGHT * VIRTUAL_SIZE_MULTIPLIER))
+        frame = cv2.resize(self.frame, (pixel_width * VIRTUAL_SIZE_MULTIPLIER, pixel_height * VIRTUAL_SIZE_MULTIPLIER))
         cv2.imshow('LED matrix', enhance(frame))
 
         # this is the magic sauce -- waitKey runs all the cv2 handlers behind the scene
         # without this there is no rendering
-        cv2.waitKey(VIRTUAL_FRAMERATE)
+        cv2.waitKey(virtual_framerate)
 
     def reset(self, rgb_color = (0, 0, 0)):
         self.frame = reset(rgb_color)
@@ -126,7 +146,7 @@ def pixels():
         return neopixel.NeoPixel(
             pixel_pin,
             pixel_width * pixel_height,
-            brightness=BRIGHTNESS,
+            brightness=brightness,
             auto_write=False,
         )
 

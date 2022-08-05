@@ -1,7 +1,7 @@
 import os
 import sys
 import inspect
-from led_matrix import Matrix, pixel_height, pixel_width
+from src.led_matrix import Matrix, pixel_height, pixel_width
 
 effect_module  = 'effects/' + sys.argv[1]
 sys.path.append(effect_module)
