@@ -4,6 +4,7 @@ import random
 import cv2
 import numpy as np
 
+from lib import colors
 from PIL import ImageEnhance, Image, ImageDraw, ImageFont
 from .lib import colors
 

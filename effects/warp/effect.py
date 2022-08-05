@@ -1,6 +1,8 @@
 #
 # Warp speed
-# 21 July 2022
+#
+# 25 July 2022 = Added black hole in center
+# 21 July 2022 - Simple lines moving away from center using trig
 #
 
 from operator import itemgetter
@@ -13,8 +15,6 @@ def run(matrix, config):
 	def new_star(mid_x, mid_y, dist):
 		""" Create a new star """
 		color = matrix.random_color()
-		x = mid_x
-		y = mid_y
 		angle = 60 + random.randrange(720)
 
 		return {"color": color, "x": mid_x, "y": mid_y, "angle": angle, "dist": dist}
@@ -46,4 +46,5 @@ def run(matrix, config):
 			else:
 				galaxy[star] = {"color": color, "x": x, "y": y, "angle": angle, "dist": dist}
 
+		matrix.circle((mid_x, mid_y), 2, (0,0,0), -1)
 		matrix.show()
