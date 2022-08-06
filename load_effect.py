@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import inspect
 from src.led_matrix import Matrix, pixel_height, pixel_width
 
@@ -11,7 +12,9 @@ effect_dir = os.path.realpath(
     )
 )
 sys.path.insert(0, effect_dir)
-print("starting " + effect_module)
+print("Starting: " + effect_module)
+argv_json = json.dumps(sys.argv[2:])
+print('Playlist JSON: {"effect": "marquee", "argv": ' + argv_json + '}')
 import effect # pylint: disable=wrong-import-position, wrong-import-order
 matrix = Matrix()
 
