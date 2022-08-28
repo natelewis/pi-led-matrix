@@ -1,0 +1,14 @@
+{
+    "pixel_width": 60,
+    "pixel_height": 30,
+    "brightness": 0.2,
+    "contrast": 2,
+    "color": 1.5,
+    "virtual_framerate": 75,
+    "playlist_delay": 30,
+    "playlist": [
+        {"effect": "hallway", "argv": []},
+        {"effect": "snow", "argv": []},
+        {"effect": "water_ripple", "argv":[]}
+    ]
+}
