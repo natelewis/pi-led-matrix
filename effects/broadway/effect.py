@@ -1,11 +1,11 @@
 #
-# Jewels
+# Broadway Lights
 # 3 January 2023
 #
 
 
 def run(matrix, config):
-	""" Jewels """
+	""" Broadway Lights """
 	min_y = 0
 	min_x = 0
 	max_y = config['pixel_height']
@@ -50,4 +50,6 @@ def run(matrix, config):
 			new_dots[coord] = new_color
 		dots = new_dots
 
+		matrix.text("The", (9, 4), 6, matrix.color('white'), 'dosis.ttf')
+		matrix.text("BEVERLY", (9, 8), 12, matrix.color('white'), 'dosis.ttf')
 		matrix.show()
