@@ -100,7 +100,7 @@ def run(matrix, config):
 
         matrix.show()
 
-        matrix.delay(100)
+        matrix.delay(10)
 
         # change color of legs, alternating between black and white gives illusion of animation
         if animate_frame == 0:
