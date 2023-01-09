@@ -29,4 +29,5 @@ def run(matrix, config):
 
 		matrix.show()
 
-		matrix.delay(PAUSE * 1000)
+		if PAUSE > 0:
+			matrix.delay(PAUSE * 1000)
