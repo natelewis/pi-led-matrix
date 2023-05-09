@@ -53,7 +53,7 @@ In this example I built a 60x30 array with 5V 300W 60A power supply, which is pl
 
 1. Attach 5V power from the PSU to top of each strip in parallel ( every other one )
 
-2. Connect GPIO 18 of the RPi4 to the green LED wire
+2. Connect GPIO 18 (pin 12) of the RPi4 to the green LED wire
 
 3. Connect GND pin of the RPi4 to COM of the power supply
 
@@ -73,7 +73,7 @@ In this example I built a 60x30 array with 5V 300W 60A power supply, which is pl
     ```bash
     sudo apt update
     sudo apt install -y ffmpeg libatlas-base-dev
-    sudo pip3 install --upgrade adafruit-python-shell opencv-python rpi_ws281x adafruit-circuitpython-neopixel numpy adafruit_pixel_framebuf
+    sudo pip3 install --upgrade adafruit-python-shell opencv-python rpi_ws281x adafruit-circuitpython-neopixel numpy adafruit-circuitpython-pixel-framebuf
     wget https://raw.githubusercontent.com/adafruit/Raspberry-Pi-Installer-Scripts/master/raspi-blinka.py
     sudo python3 raspi-blinka.py
     copy default_config.json config.json

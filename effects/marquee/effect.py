@@ -32,7 +32,7 @@ def run(matrix, config):
     def display_text(x, y, text, font_color, font):
         matrix.text(text, (x, y), 16, font_color, font)
 
-    while True:
+    while matrix.good_to_go():
         matrix.reset()
         for idx, message in enumerate(messages):
             x, y, r, g, b, text, font = message

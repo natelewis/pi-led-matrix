@@ -14,7 +14,7 @@ def tunnel_rectangle(config, matrix, offset):
 def run(matrix, config):
 	"""hallway coming towards you"""
 	wall_offsets = [0, 10, 20, 30]
-	while True:
+	while matrix.good_to_go():
 			matrix.reset()
 			for idx, offset in enumerate(wall_offsets):
 				offset = offset + 1

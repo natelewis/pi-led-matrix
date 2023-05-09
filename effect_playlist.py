@@ -43,10 +43,9 @@ def run_effect(index):
 
 if __name__ == '__main__':
     print("Starting playlist: CTRL-c to stop")
+    multiprocessing.set_start_method('spawn')
     while True:
         effect_index = random.randrange(len(effects))
         p = multiprocessing.Process(target=run_effect, name="run_effect", args=(effect_index,))
         p.start()
-        time.sleep(playlist_delay)
-        p.terminate()
         p.join()

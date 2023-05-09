@@ -33,7 +33,7 @@ def run(matrix, config):
 	for _ in range(max_x):
 		lines.append(new_line())
 
-	while True:    
+	while matrix.good_to_go():    
 		matrix.reset(background_color)
 		
 		for i in range(max_x):

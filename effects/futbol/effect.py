@@ -16,7 +16,7 @@ def run(matrix, config):
 
     blue_pos = [(24, 18), (28, 18), (32, 18), (36, 18), (30, 23), (26, 23), (55, 23), (44, 20), (32, 26), (8, 22), (12, 24)]
 
-    while True:
+    while matrix.good_to_go():
         # Draw a green football field
         matrix.reset(matrix.color('green'))
 

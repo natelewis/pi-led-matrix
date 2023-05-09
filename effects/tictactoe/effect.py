@@ -131,7 +131,7 @@ def run(matrix, config):
 
     clear_grid()
 
-    while True:
+    while matrix.good_to_go():
         matrix.reset()
 
         draw_board()

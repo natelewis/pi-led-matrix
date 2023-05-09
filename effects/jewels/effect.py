@@ -46,7 +46,7 @@ def run(matrix, config):
 
 	stable_jewels = 0
 
-	while True:    
+	while matrix.good_to_go():    
 		matrix.reset(background_color)
 
 		new_jewels = {}
