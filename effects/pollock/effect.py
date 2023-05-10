@@ -20,7 +20,7 @@ def run(matrix, config):
 
 	background_color = matrix.color('black')
 
-	while True:    
+	while matrix.ready():    
 		matrix.reset(background_color)
 
 		for x in range(max_x):

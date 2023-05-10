@@ -40,7 +40,7 @@ def run(matrix, config):
         color = matrix.random_color()
         all_balls.append({'x': x, 'y': y, 'x_vector': x_vector, 'y_vector': y_vector, 'color': color})
 
-    while True:
+    while matrix.ready():
         matrix.reset()
 
         for ball, _ in enumerate(all_balls):

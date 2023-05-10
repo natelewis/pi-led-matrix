@@ -22,7 +22,7 @@ def run(matrix, config):
 	my = int(config['pixel_height'] / 2)
 	mx = int(config['pixel_width'] / 2)
  
-	while True:    
+	while matrix.ready():    
 		matrix.reset()
 		
 		for i in range(ADD_PARTICLES):

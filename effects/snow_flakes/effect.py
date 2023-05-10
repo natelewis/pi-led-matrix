@@ -41,7 +41,7 @@ def run(matrix, config):
     """falling snow"""
     flake_height = len(flake_1)
     snow_flakes = [{'y': -flake_height, 'x': 0}] * snow_flake_count
-    while True:
+    while matrix.ready():
         matrix.reset()
         for idx, _ in enumerate(snow_flakes):
             x, y = itemgetter('x', 'y')(snow_flakes[idx])

@@ -9,6 +9,21 @@
     "playlist": [
         {"effect": "hallway", "argv": []},
         {"effect": "snow", "argv": []},
+        {"effect": "broadway", "argv": []},
+        {"effect": "eye", "argv": []},
+        {"effect": "hallway", "argv": []},
+        {"effect": "futbol", "argv": []},
+        {"effect": "jewels", "argv": []},
+        {"effect": "matrix", "argv": []},
+        {"effect": "pollock", "argv": []},
+        {"effect": "multiball", "argv": []},
+        {"effect": "pacman", "argv": []},
+        {"effect": "pong", "argv": []},
+        {"effect": "snow_flakes", "argv": []},
+        {"effect": "space_invaders", "argv": []},
+        {"effect": "sparkler", "argv": []},
+        {"effect": "tictactoe", "argv": []},
+        {"effect": "warp", "argv": []},
         {"effect": "water_ripple", "argv":[]}
     ]
 }
