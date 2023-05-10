@@ -90,7 +90,7 @@ def run(matrix, config):
     pacman_direction = 1
     ghost_body = ghost_agro
 
-    while matrix.good_to_go():
+    while matrix.ready():
         matrix.reset()
         matrix.sprite(pacman_face, (x, y), pacman_color_key[animate_frame % len(pacman_color_key)])
         matrix.sprite(ghost_body, (x - 2 - len(ghost_agro), y), ghost_color_key[animate_frame % len(ghost_color_key)])

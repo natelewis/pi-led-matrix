@@ -15,7 +15,7 @@ def run(matrix, config):
     """ eyes looking at you """
     eye_color = random.choices([matrix.color('brown'), matrix.color('blue'), matrix.color('forestgreen'), matrix.color('green')], weights=[45, 28, 18, 9])[0]
 
-    while matrix.good_to_go():
+    while matrix.ready():
         x_dir, y_dir = random.choices([(0,0), (5, 0), (-5, 0), (0, 5), (0, -5), (5, -5), (5, 5), (-5, 5), (-5, -5)], weights=[60, 5, 5, 5, 5, 5, 5, 5, 5])[0]
         matrix.reset()
         for eye in [15, 45]:

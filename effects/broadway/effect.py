@@ -45,7 +45,7 @@ def run(matrix, config):
 
 	background_color = matrix.color('black')
 
-	while matrix.good_to_go():    
+	while matrix.ready():    
 		matrix.reset(background_color)
 		
 		new_dots = {}

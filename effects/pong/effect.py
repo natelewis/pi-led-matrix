@@ -44,7 +44,7 @@ def run(matrix, config):
                 return paddle_y - 1
         return paddle_y
 
-    while matrix.good_to_go():
+    while matrix.ready():
         matrix.reset()
 
         if x + x_vector <= x_min or x + x_vector >= x_max:

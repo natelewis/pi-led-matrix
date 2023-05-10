@@ -28,7 +28,7 @@ def run(matrix, config):
 	for star in range(num_of_stars):
 		galaxy.append(new_star(mid_x, mid_y, 8 % (star + 1)))
 
-	while matrix.good_to_go():
+	while matrix.ready():
 		matrix.reset()
 		for star in range(len(galaxy)):
 			x, y, angle, color, dist = itemgetter('x', 'y', 'angle', 'color', 'dist')(galaxy[star])

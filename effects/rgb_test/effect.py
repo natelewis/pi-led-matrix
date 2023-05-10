@@ -2,7 +2,7 @@
 # Red... Green... Blue... (Repeat)
 def run(matrix, config):
     """red, green, blue, repeat"""
-    while matrix.good_to_go():
+    while matrix.ready():
         matrix.reset(matrix.color('red'))
         matrix.show()
         matrix.delay(1000)

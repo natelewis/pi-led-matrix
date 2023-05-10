@@ -80,7 +80,7 @@ def run(matrix, config):
     y = init_y
     direction = 1
 
-    while matrix.good_to_go():
+    while matrix.ready():
         matrix.reset(background_color)
 
         # draw squids

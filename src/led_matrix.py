@@ -96,17 +96,20 @@ def text(self, message, start, font_size, rgb_color, ttf_file):
 def random_color():
     return (random.randrange(255), random.randrange(255), random.randrange(255))
 
+def ready(start_time):
+    if (int(time.time()) - start_time) < playlist_delay:
+        return True
+    else:
+        return False
+    
 class VirtualMatrix():
     def __init__(self):
         self.frame = []
         self.reset()
         self.start_time = int(time.time())
 
-    def good_to_go(self):
-        if (int(time.time()) - self.start_time) < playlist_delay:
-            return True
-        else:
-            return False
+    def ready(self):
+        return ready(self.start_time)
     
     def color(self, color_name):
         return colors.MAP[color_name]
@@ -172,11 +175,8 @@ class LiveMatrix():
         )
         self.start_time = int(time.time())
 
-    def good_to_go(self):
-        if (int(time.time()) - self.start_time) < playlist_delay:
-            return True
-        else:
-            return False
+    def ready(self):
+        return ready(self.start_time)
 
     def color(self, color_name):
         return colors.MAP[color_name]
