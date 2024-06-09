@@ -18,7 +18,7 @@ def run(matrix, config):
 
     while matrix.ready():
         # Draw a green football field
-        matrix.reset(matrix.color('green'))
+        matrix.reset((0,20,0))
 
         # Draw yard line
         matrix.line((0, int(y_max/2)), (x_max, int(y_max/2)), matrix.color('white'), 1) 

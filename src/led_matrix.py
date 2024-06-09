@@ -10,6 +10,9 @@ from PIL import ImageEnhance, Image, ImageDraw, ImageFont
 from .lib import colors
 
 CUSTOM_CONFIG = exists('config.json')
+# print the name of the config file being used
+print(f'Using {"custom" if CUSTOM_CONFIG else "default"} config file')
+
 CONFIG = 'default_config.json' if not CUSTOM_CONFIG else 'config.json'
 
 with open(CONFIG, mode='r',  encoding='utf8') as j_object:
@@ -27,6 +30,9 @@ contrast = cfg['contrast']
 
 #color (1 is no change)
 color = cfg['color']
+
+#color rgb swap, default is string 'rgb' which does not swap any color
+color_order = cfg['color_order']
 
 # framerate between renderings in milliseconds in virtual mode
 # this mimics the delay of hardware latency
@@ -75,9 +81,26 @@ def enhance(image):
     contrasted_image =  contrast_enhancer.enhance(contrast)
     return np.array(contrasted_image)
 
+def swap_colors(rgb_color, order='rgb'):
+    """
+    Swaps the order of an RGB color tuple according to the specified order.
+
+    Parameters:
+    - rgb_color: A tuple representing the color (R, G, B).
+    - order: A string representing the desired order, e.g., 'bgr', 'rbg', etc.
+
+    Returns:
+    - A tuple of the color in the new order.
+    """
+    # Create a mapping from characters to their indices in the original tuple
+    index_map = {'r': 0, 'g': 1, 'b': 2}
+    # Use the mapping to rearrange the tuple according to the specified order
+    return tuple(rgb_color[index_map[char]] for char in order)
+
+# exclusive to the virtual env
 def swap_rgb_to_bgr(rgb_color):
-    r, g, b = rgb_color
-    return (b, g, r)
+    return swap_colors(rgb_color, 'bgr')
+
 
 def sprite(self, sprite_map, start, color_map):
     for y, line in enumerate(sprite_map):
@@ -171,7 +194,8 @@ class LiveMatrix():
             neopixel_pixels,
             pixel_width,
             pixel_height,
-            orientation=VERTICAL
+            orientation=VERTICAL,
+            alternating=True,
         )
         self.start_time = int(time.time())
 
@@ -192,16 +216,17 @@ class LiveMatrix():
         self.frame = np.array(rgb_image)
 
     def line(self, start, end, rgb_color, width):
-        cv2.line(self.frame, start, end, rgb_color, width)
+        print(f'line: {start} {end} {swap_colors(rgb_color, color_order)} {width}')
+        cv2.line(self.frame, start, end, swap_colors(rgb_color, color_order), width)
 
     def pixel(self, start, rgb_color):
-        cv2.line(self.frame, start, start, rgb_color, 1)
+        cv2.line(self.frame, start, start, swap_colors(rgb_color, color_order), 1)
 
     def rectangle(self, start, end, rgb_color, width):
-        cv2.rectangle(self.frame,  start, end, rgb_color, width)
+        cv2.rectangle(self.frame,  start, end, swap_colors(rgb_color, color_order), width)
 
     def circle(self, center, radius, rgb_color, width):
-        cv2.circle(self.frame, center, radius, rgb_color, width)
+        cv2.circle(self.frame, center, radius, swap_colors(rgb_color, color_order), width)
 
     def delay(self, ms):
         delay(ms)
@@ -215,7 +240,7 @@ class LiveMatrix():
         self.buff.display()
 
     def text(self, message, start, font_size, rgb_color, font = 'dosis.ttf'):
-        text(self, message, start, font_size, rgb_color, font)
+        text(self, message, start, font_size, swap_colors(rgb_color, color_order), font)
 
 # return the class for your env
 def Matrix(): # pylint: disable=invalid-name
