@@ -5,6 +5,10 @@
 		}
 	],
 	"settings": {
+		"[python]": {
+			"editor.defaultFormatter": "ms-python.black-formatter",
+			"editor.formatOnSave": true
+		},
 		"python.analysis.diagnosticSeverityOverrides": {
 			"reportMissingImports": "none",
 		},
@@ -16,6 +20,6 @@
 			"fromarray",
 			"imshow",
 			"neopixel"
-		]
+		],
 	}
 }
