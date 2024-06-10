@@ -6,6 +6,8 @@
     "color": 1.5,
     "virtual_framerate": 75,
     "playlist_delay": 30,
+    "color_order": "rgb",
+    "alternating": true,
     "playlist": [
         {"effect": "hallway", "argv": []},
         {"effect": "snow", "argv": []},
