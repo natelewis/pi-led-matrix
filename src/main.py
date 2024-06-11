@@ -1,13 +1,16 @@
-from os.path import exists
 import json
 import cv2
 import numpy as np
 
-from lib.image import reset, enhance, sprite
-from lib.time import delay, get_start_time, ready
-from lib.text import text
-from lib.color import COLOR_MAP, swap_colors, random_color
+from os.path import exists
+
 from PIL import Image
+from src.lib import image, text, color as color_lib, time
+
+
+class MockBoard:
+    D18 = "Mock D18"
+
 
 CUSTOM_CONFIG = exists("config.json")
 print(f'Using {"custom" if CUSTOM_CONFIG else "default"} config file')
@@ -64,22 +67,24 @@ try:
 except ImportError:
     # virtual env
     VIRTUAL_ENV = True
+    # mock the board module for the virtual env
+    board = MockBoard()
 
 
 class VirtualMatrix:
     def __init__(self):
         self.frame = []
         self.reset()
-        self.start_time = get_start_time()
+        self.start_time = time.get_start_time()
 
     def ready(self):
-        return ready(self.start_time, playlist_delay)
+        return time.ready(self.start_time, playlist_delay)
 
     def color(self, color_name):
-        return COLOR_MAP[color_name]
+        return color_lib.COLOR_MAP[color_name]
 
     def random_color(self):
-        return random_color()
+        return color_lib.random_color()
 
     def image(self, img):
         rgb_image = img.convert("RGB")
@@ -93,35 +98,46 @@ class VirtualMatrix:
                 pixel_height * VIRTUAL_SIZE_MULTIPLIER,
             ),
         )
-        cv2.imshow("LED matrix", enhance(frame, color, contrast))
+        cv2.imshow("LED matrix", image.enhance(frame, color, contrast))
 
         # this is the magic sauce -- waitKey runs all the cv2 handlers behind the scene
         # without this there is no rendering
         cv2.waitKey(virtual_framerate)
 
     def reset(self, rgb_color=(0, 0, 0)):
-        self.frame = reset(rgb_color, pixel_height, pixel_width)
+        self.frame = image.reset(rgb_color, pixel_height, pixel_width)
 
     def delay(self, ms):
-        delay(ms)
+        time.delay(ms)
 
     def line(self, start, end, rgb_color, width):
-        cv2.line(self.frame, start, end, swap_colors(rgb_color, "bgr"), width)
+        cv2.line(self.frame, start, end, color_lib.swap_colors(rgb_color, "bgr"), width)
 
     def pixel(self, start, rgb_color):
-        cv2.line(self.frame, start, start, swap_colors(rgb_color, "bgr"), 1)
+        cv2.line(self.frame, start, start, color_lib.swap_colors(rgb_color, "bgr"), 1)
 
     def rectangle(self, start, end, rgb_color, width):
-        cv2.rectangle(self.frame, start, end, swap_colors(rgb_color, "bgr"), width)
+        cv2.rectangle(
+            self.frame, start, end, color_lib.swap_colors(rgb_color, "bgr"), width
+        )
 
     def circle(self, center, radius, rgb_color, width):
-        cv2.circle(self.frame, center, radius, swap_colors(rgb_color, "bgr"), width)
+        cv2.circle(
+            self.frame, center, radius, color_lib.swap_colors(rgb_color, "bgr"), width
+        )
 
     def text(self, message, start, font_size, rgb_color, font="dosis.ttf"):
-        text(self, message, start, font_size, swap_colors(rgb_color, "bgr"), font)
+        text.text(
+            self,
+            message,
+            start,
+            font_size,
+            color_lib.swap_colors(rgb_color, "bgr"),
+            font,
+        )
 
     def sprite(self, sprite_map, start, color_map):
-        sprite(self, sprite_map, start, color_map)
+        image.sprite(self, sprite_map, start, color_map)
 
 
 # NeoPixels must be connected to D10, D12, D18 or D21
@@ -147,53 +163,68 @@ class LiveMatrix:
             orientation=VERTICAL,
             alternating=alternating,
         )
-        self.start_time = get_start_time()
+        self.start_time = time.get_start_time()
 
     def ready(self):
-        return ready(self.start_time, playlist_delay)
+        return time.ready(self.start_time, playlist_delay)
 
     def color(self, color_name):
-        return COLOR_MAP[color_name]
+        return color_lib.COLOR_MAP[color_name]
 
     def random_color(self):
-        return random_color()
+        return color_lib.random_color()
 
     def reset(self, rgb_color=(0, 0, 0)):
-        self.frame = reset(rgb_color, pixel_height, pixel_width)
+        self.frame = image.reset(rgb_color, pixel_height, pixel_width)
 
     def image(self, img):
         rgb_image = img.convert("RGB")
         self.frame = np.array(rgb_image)
 
     def line(self, start, end, rgb_color, width):
-        cv2.line(self.frame, start, end, swap_colors(rgb_color, color_order), width)
+        cv2.line(
+            self.frame, start, end, color_lib.swap_colors(rgb_color, color_order), width
+        )
 
     def pixel(self, start, rgb_color):
-        cv2.line(self.frame, start, start, swap_colors(rgb_color, color_order), 1)
+        cv2.line(
+            self.frame, start, start, color_lib.swap_colors(rgb_color, color_order), 1
+        )
 
     def rectangle(self, start, end, rgb_color, width):
         cv2.rectangle(
-            self.frame, start, end, swap_colors(rgb_color, color_order), width
+            self.frame, start, end, color_lib.swap_colors(rgb_color, color_order), width
         )
 
     def circle(self, center, radius, rgb_color, width):
         cv2.circle(
-            self.frame, center, radius, swap_colors(rgb_color, color_order), width
+            self.frame,
+            center,
+            radius,
+            color_lib.swap_colors(rgb_color, color_order),
+            width,
         )
 
     def delay(self, ms):
-        delay(ms)
+        time.delay(ms)
 
     def sprite(self, sprite_map, start, color_map):
-        sprite(self, sprite_map, start, color_map)
+        image.sprite(self, sprite_map, start, color_map)
 
     def show(self):
-        img = Image.fromarray(enhance(self.frame, color, contrast), mode="RGB")
+        img = Image.fromarray(image.enhance(self.frame, color, contrast), mode="RGB")
         self.buff.image(img)
         self.buff.display()
 
     def text(self, message, start, font_size, rgb_color, font="dosis.ttf"):
-        text(self, message, start, font_size, swap_colors(rgb_color, color_order), font)
+        text.text(
+            self,
+            message,
+            start,
+            font_size,
+            color_lib.swap_colors(rgb_color, color_order),
+            font,
+        )
 
 
 # return the class for your env
