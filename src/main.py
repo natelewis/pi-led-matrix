@@ -20,7 +20,13 @@ CONFIG = "default_config.json" if not CUSTOM_CONFIG else "config.json"
 with open(CONFIG, mode="r", encoding="utf8") as j_object:
     cfg = json.load(j_object)
 
-# size of matrix
+# array of pixel pins for the LED matrix
+# valid values for neoPixels are "D10", "D12", "D18" or "D21"
+pixel_pins = cfg["pixel_pins"]
+
+# size of matrix - this should be the full width and height of the LED matrix
+# if using multiple pins to display more than one matrix then this should be
+# the full width and height of all the matrices
 pixel_width = cfg["pixel_width"]
 pixel_height = cfg["pixel_height"]
 
@@ -52,6 +58,7 @@ virtual_framerate = cfg["virtual_framerate"]
 # ]
 playlist = cfg["playlist"]
 playlist_delay = cfg["playlist_delay"]
+
 
 # config and mapping for virtual env vs pi with LED matrix
 # Virtual env only works if it is a constant event loop
@@ -91,14 +98,25 @@ class VirtualMatrix:
         self.frame = np.array(rgb_image)
 
     def show(self):
-        frame = cv2.resize(
-            self.frame,
-            (
-                pixel_width * VIRTUAL_SIZE_MULTIPLIER,
-                pixel_height * VIRTUAL_SIZE_MULTIPLIER,
-            ),
-        )
-        cv2.imshow("LED matrix", image.enhance(frame, color, contrast))
+        # loop though each pixel_pin and render the frame
+        panels = len(pixel_pins)
+        panel_width = self.frame.shape[1] // panels  # Calculate the width of each panel
+        for index, _ in enumerate(pixel_pins):
+            # Calculate start and end positions for slicing the frame
+            start_x = index * panel_width
+            end_x = start_x + panel_width
+
+            # Slice the frame to get the current panel
+            panel_frame = self.frame[:, start_x:end_x]
+
+            frame = cv2.resize(
+                panel_frame,
+                (
+                    panel_width * VIRTUAL_SIZE_MULTIPLIER,
+                    pixel_height * VIRTUAL_SIZE_MULTIPLIER,
+                ),
+            )
+            cv2.imshow(f"LED matrix {index}", image.enhance(frame, color, contrast))
 
         # this is the magic sauce -- waitKey runs all the cv2 handlers behind the scene
         # without this there is no rendering
@@ -140,7 +158,6 @@ class VirtualMatrix:
         image.sprite(self, sprite_map, start, color_map)
 
 
-# NeoPixels must be connected to D10, D12, D18 or D21
 def pixels(pixel_pin=board.D18):
     if not VIRTUAL_ENV:
         return neopixel.NeoPixel(
@@ -155,14 +172,22 @@ class LiveMatrix:
     def __init__(self):
         self.frame = []
         self.reset()
-        neopixel_pixels = pixels()
-        self.buff = PixelFramebuffer(
-            neopixel_pixels,
-            pixel_width,
-            pixel_height,
-            orientation=VERTICAL,
-            alternating=alternating,
-        )
+        self.buffers = []  # List to hold PixelFramebuffer instances
+        for pin_name in pixel_pins:
+            pin = getattr(board, pin_name)
+            buffer = PixelFramebuffer(
+                neopixel.NeoPixel(
+                    pin,
+                    pixel_width * pixel_height,
+                    brightness=brightness,
+                    auto_write=False,
+                ),
+                pixel_width,
+                pixel_height,
+                orientation=VERTICAL,
+                alternating=alternating,
+            )
+            self.buffers.append(buffer)
         self.start_time = time.get_start_time()
 
     def ready(self):
@@ -212,9 +237,21 @@ class LiveMatrix:
         image.sprite(self, sprite_map, start, color_map)
 
     def show(self):
-        img = Image.fromarray(image.enhance(self.frame, color, contrast), mode="RGB")
-        self.buff.image(img)
-        self.buff.display()
+        panels = len(pixel_pins)
+        panel_width = self.frame.shape[1] // panels  # Calculate the width of each panel
+        for index, _ in enumerate(pixel_pins):
+            # Calculate start and end positions for slicing the frame
+            start_x = index * panel_width
+            end_x = start_x + panel_width
+
+            # Slice the frame to get the current panel
+            panel_frame = self.frame[:, start_x:end_x]
+
+            img = Image.fromarray(
+                image.enhance(panel_frame, color, contrast), mode="RGB"
+            )
+            self.buffers[index].image(img)
+            self.buffers[index].display()
 
     def text(self, message, start, font_size, rgb_color, font="dosis.ttf"):
         text.text(
