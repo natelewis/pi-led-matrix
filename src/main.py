@@ -98,9 +98,7 @@ class VirtualMatrix:
         self.frame = np.array(rgb_image)
 
     def show(self):
-        # loop though each pixel_pin and render the frame
-        panels = len(pixel_pins)
-        panel_width = self.frame.shape[1] // panels  # Calculate the width of each panel
+        panel_width = self.frame.shape[1] // len(pixel_pins)  # Calculate the width of each panel
         for index, _ in enumerate(pixel_pins):
             # Calculate start and end positions for slicing the frame
             start_x = index * panel_width
@@ -173,16 +171,17 @@ class LiveMatrix:
         self.frame = []
         self.reset()
         self.buffers = []  # List to hold PixelFramebuffer instances
+        self.panel_width = self.frame.shape[1] // len(pixel_pins)
         for pin_name in pixel_pins:
             pin = getattr(board, pin_name)
             buffer = PixelFramebuffer(
                 neopixel.NeoPixel(
                     pin,
-                    pixel_width * pixel_height,
+                    self.panel_width * pixel_height,
                     brightness=brightness,
                     auto_write=False,
                 ),
-                pixel_width,
+                self.panel_width,
                 pixel_height,
                 orientation=VERTICAL,
                 alternating=alternating,
@@ -237,12 +236,10 @@ class LiveMatrix:
         image.sprite(self, sprite_map, start, color_map)
 
     def show(self):
-        panels = len(pixel_pins)
-        panel_width = self.frame.shape[1] // panels  # Calculate the width of each panel
         for index, _ in enumerate(pixel_pins):
             # Calculate start and end positions for slicing the frame
-            start_x = index * panel_width
-            end_x = start_x + panel_width
+            start_x = index * self.panel_width
+            end_x = start_x + self.panel_width
 
             # Slice the frame to get the current panel
             panel_frame = self.frame[:, start_x:end_x]
@@ -251,6 +248,8 @@ class LiveMatrix:
                 image.enhance(panel_frame, color, contrast), mode="RGB"
             )
             self.buffers[index].image(img)
+
+        for index, _ in enumerate(pixel_pins):
             self.buffers[index].display()
 
     def text(self, message, start, font_size, rgb_color, font="dosis.ttf"):
