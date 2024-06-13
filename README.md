@@ -11,8 +11,8 @@ https://user-images.githubusercontent.com/1588877/177685583-cab5ac70-1f26-48f9-a
 ## Virtual Environment Quick Start
 
 ```bash
-git clone git@github.com:natelewis/pi-led-matrix-playground.git
-cd pi-led-matrix-playground
+git clone git@github.com:natelewis/pi-led-matrix.git
+cd pi-led-matrix
 python3 -m virtualenv venv
 source venv/bin/activate
 pip3 install opencv-python numpy pillow
@@ -133,7 +133,7 @@ If you want use this outside of the effects directory import the `Matrix` class.
 
 ```python
 # import matrix if not in an effect run()
-from led_matrix import Matrix
+from main import Matrix
 matrix = Matrix()
 
 # draw some random things to show how this works

@@ -8,6 +8,7 @@
     "playlist_delay": 30,
     "color_order": "rgb",
     "alternating": true,
+    "pixel_pins": ["D18"],
     "playlist": [
         {"effect": "hallway", "argv": []},
         {"effect": "snow", "argv": []},

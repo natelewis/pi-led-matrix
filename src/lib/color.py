@@ -1,4 +1,38 @@
-MAP = {
+import random
+
+
+def swap_colors(rgb_color, order="rgb"):
+    """
+    Swaps the order of the RGB color channels in a tuple.
+
+    Args:
+        rgb_color (tuple): The RGB color tuple to be rearranged.
+        order (str, optional): The desired order of the color channels. Defaults to "rgb".
+
+    Returns:
+        tuple: The rearranged RGB color tuple.
+
+    Example:
+        >>> swap_colors((255, 0, 0), "bgr")
+        (0, 0, 255)
+    """
+    # Create a mapping from characters to their indices in the original tuple
+    index_map = {"r": 0, "g": 1, "b": 2}
+    # Use the mapping to rearrange the tuple according to the specified order
+    return tuple(rgb_color[index_map[char]] for char in order)
+
+
+def random_color():
+    """
+    Generates a random RGB color.
+
+    Returns:
+        tuple: A tuple representing the RGB color, with values ranging from 0 to 255.
+    """
+    return (random.randrange(255), random.randrange(255), random.randrange(255))
+
+
+COLOR_MAP = {
     "aliceblue": (
         240,
         248,
