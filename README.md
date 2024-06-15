@@ -1,12 +1,12 @@
 # Raspberry Pi LED Matrix
 
-This is a LED matrix library that simplifies driving a LED matrix of any size created with WS2812B LED strips.  It also is a virtual LED matrix simulator you can use to help create effects, and animations without the need for a physical matrix.  When running effects you can execute them individually, or in a random playlist.
-### Virtual Environment Simulator 60x30 Example
-https://user-images.githubusercontent.com/1588877/177685586-e4cb158d-c840-4b89-855e-5bfd087991b5.mp4
+This is a LED matrix library that simplifies driving a LED matrix of any size created with WS2812B and WS2811 LED strips.  It also is a virtual LED matrix simulator you can use to help create effects, and animations without the need for a physical matrix.  When running effects you can execute them individually, or in a random playlist.
 
+### Virtual Environment Simulator 60x30 Example
+<https://user-images.githubusercontent.com/1588877/177685586-e4cb158d-c840-4b89-855e-5bfd087991b5.mp4>
 
 ### Physical LED Matrix 60x30 Example
-https://user-images.githubusercontent.com/1588877/177685583-cab5ac70-1f26-48f9-ab31-55bf0a61bf8d.mp4
+<https://user-images.githubusercontent.com/1588877/177685583-cab5ac70-1f26-48f9-ab31-55bf0a61bf8d.mp4>
 
 ## Virtual Environment Quick Start
 
@@ -15,8 +15,7 @@ git clone git@github.com:natelewis/pi-led-matrix.git
 cd pi-led-matrix
 python3 -m virtualenv venv
 source venv/bin/activate
-pip3 install opencv-python numpy pillow
-./run.sh rgb_test
+make run rgb_test
 # Red, blue, green... in a 600x300 window
 # ctl-c to stop script
 ```
@@ -27,7 +26,7 @@ High level construction details of a LED matrix panel.
 
 Shopping List:
 
-* WS2812B LED strips
+* WS2812B or WS2811 LED strips
 * 5V power supply
 * Raspberry Pi 4
 * A few extra meters of 3 pin wire @ 22AWG
@@ -51,16 +50,13 @@ In this example I built a 60x30 array with 5V 300W 60A power supply, which is pl
     |_| |_| |_|
     ```
 
-1. Attach 5V power from the PSU to top of each strip in parallel ( every other one )
+3. Attach 5V power from the PSU to top of each strip in parallel ( every other one )
 
-2. Connect GPIO 18 (pin 12) of the RPi4 to the green LED wire
+4. Connect GPIO 18 (pin 12) of the RPi4 to the green LED wire
 
-3. Connect GND pin of the RPi4 to COM of the power supply
+5. Connect GND pin of the RPi4 to COM of the power supply
 
-4. Hang the LED strips to the curtain rod or other mount with your adhesive of choice
-
-5. Stick the wood to the back of the strips to keep them from bending around or some other creative way to keep them straight
-
+6. Hang the LED strips to the curtain rod or other mount with your adhesive of choice
 
 ## Raspberry Pi setup
 
@@ -87,7 +83,7 @@ Running the test script will cycle between R..., G..., B... (repeat)...
 Depending on what version of the strips you have, it might be possible the RGB colors are swapped around.   You can fix it with code that [looks like this](https://github.com/natelewis/pi-led-matrix/blob/42a74e666d4ceee59fd85e5c1396625330ca00ec/effects/video/effect.py#L35-L37). I've never had hardware that does this to properly test a config option, but will happily add one if someone can document the details.
 
 ```bash
-./run.sh rgb_test
+make run effect=rgb_test
 # ctl-c to stop script
 ```
 
@@ -96,40 +92,50 @@ Depending on what version of the strips you have, it might be possible the RGB c
 LEDs will maintain their currently lit state when you cancel your script.  You can use the off effect to turn them off:
 
 ```bash
-./run.sh off
+make off
+# alias to: make run effect=off
 ```
+
+``
 
 ## Effects
 
 Custom effects are organized in the `effects` directory with the following structure:
 
-```text
-> effects > effect_name > effects.py
+```bash
+> src > effects > effect_name > effects.py
 ```
 
 They can be displayed with:
 
-```text
-./run.sh effect_name
+```bash
+make run effect=effect_name
+```
+
+Some that support options can be passed a config:
+
+```bash
+make run effect=effect_name config='{"some_json":"config settings"}'
 ```
 
 [View the effects list and usage details](effects/README.md)
 
 ## Playlist
 
-Run a slide show of effects that run in random order with a delay between effects.
+Run a slide show of effects that run in random order with a delay between effects.   When ever running
+a single effect, the playlist json will be display on execution, use this to build your custom playlist.
 
 ```bash
-./playlist.sh
+make playlist
 ```
 
 You can choose what effects are in the playlist and the delay in the `config.py`.
+
 # API
 
 When emulating the LED array locally, it detects you do not have any of the adafruit modules installed and fails over to virtual mode.  To synchronously pause your event loop when animating use the `matrix.delay()` function.  This will ensure your rendering window stays open while waiting.
 
 If you want use this outside of the effects directory import the `Matrix` class.  If you are building inside an [effect](effects/README.md) this is already been done for you and passed to your `run()` function.
-
 
 ```python
 # import matrix if not in an effect run()
@@ -144,6 +150,7 @@ matrix.circle((30, 15), 10, (0, 0, 255),  2) # blue circle
 matrix.show()
 matrix.delay(10000) # delay 10 seconds before shutting virtual window down
 ```
+
 <img width="450" alt="Screen Shot 2022-07-07 at 12 03 23 AM" src="https://user-images.githubusercontent.com/1588877/177688122-57a522d4-5d3d-4401-ae9d-464fef425688.png">
 
 <br/>
@@ -153,6 +160,7 @@ matrix.delay(10000) # delay 10 seconds before shutting virtual window down
 ---
 
 Draw a circle from its center point with a given radius.  A width of `-1` will fill in the circle.
+
 ```python
 matrix.circle((30, 15), 10, (0, 0, 255),  3) # blue circle
 matrix.show()
@@ -166,7 +174,6 @@ matrix.delay(5000)
 ---
 
 Return the color for any standard [css color name](https://www.w3.org/wiki/CSS/Properties/color/keywords).
-
 
 ```python
 matrix.reset(matrix.color('fuchsia')) # paint led's fuchsia (255, 0, 255)

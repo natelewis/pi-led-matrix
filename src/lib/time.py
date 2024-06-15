@@ -1,5 +1,5 @@
-import cv2
 import time
+import cv2
 
 
 def get_start_time():

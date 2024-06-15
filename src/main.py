@@ -1,21 +1,28 @@
 import json
+import os
+
+
 import cv2
 import numpy as np
-
-from os.path import exists
-
 from PIL import Image
-from src.lib import image, text, color as color_lib, time
+
+from lib import color as color_lib
+from lib import image, text, time
 
 
 class MockBoard:
     D18 = "Mock D18"
 
 
-CUSTOM_CONFIG = exists("config.json")
-print(f'Using {"custom" if CUSTOM_CONFIG else "default"} config file')
-
+CUSTOM_CONFIG = os.path.exists("config.json")
 CONFIG = "default_config.json" if not CUSTOM_CONFIG else "config.json"
+
+print(
+    f'Using {"custom" if CUSTOM_CONFIG else "default"} config file: '
+    + os.getcwd()
+    + "/"
+    + CONFIG
+)
 
 with open(CONFIG, mode="r", encoding="utf8") as j_object:
     cfg = json.load(j_object)
@@ -70,7 +77,7 @@ try:
     # live env
     import board
     import neopixel
-    from adafruit_pixel_framebuf import PixelFramebuffer, VERTICAL
+    from adafruit_pixel_framebuf import VERTICAL, PixelFramebuffer
 except ImportError:
     # virtual env
     VIRTUAL_ENV = True
@@ -98,7 +105,9 @@ class VirtualMatrix:
         self.frame = np.array(rgb_image)
 
     def show(self):
-        panel_width = self.frame.shape[1] // len(pixel_pins)  # Calculate the width of each panel
+        panel_width = self.frame.shape[1] // len(
+            pixel_pins
+        )  # Calculate the width of each panel
         for index, _ in enumerate(pixel_pins):
             # Calculate start and end positions for slicing the frame
             start_x = index * panel_width
