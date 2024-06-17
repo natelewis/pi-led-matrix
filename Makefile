@@ -15,7 +15,7 @@ off:
 
 bootstrap:
 	@ \
-	echo "Setting up virtual environment"; \
+	echo "Setting up virtual python environment"; \
 	python3 -m venv .venv; \
 	. .venv/bin/activate; \
 	echo "Installing module requirements"; \

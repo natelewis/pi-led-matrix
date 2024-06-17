@@ -13,8 +13,7 @@ This is a LED matrix library that simplifies driving a LED matrix of any size cr
 ```bash
 git clone git@github.com:natelewis/pi-led-matrix.git
 cd pi-led-matrix
-python3 -m virtualenv venv
-source venv/bin/activate
+make bootstrap
 make run rgb_test
 # Red, blue, green... in a 600x300 window
 # ctl-c to stop script
@@ -68,8 +67,8 @@ In this example I built a 60x30 array with 5V 300W 60A power supply, which is pl
 
     ```bash
     sudo apt update
-    sudo apt install -y ffmpeg libopenblas-dev
-    git clone git@github.com:natelewis/pi-led-matrix.git
+    sudo apt install -y ffmpeg libopenblas-dev libgtk2.0-dev
+    git clone https://github.com/natelewis/pi-led-matrix.git
     cd pi-led-matrix
     make bootstrap
     cp default_config.json config.json
