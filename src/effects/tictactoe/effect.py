@@ -12,6 +12,7 @@
 
 import random
 
+
 #
 # ./run.sh tictactoe
 #
@@ -24,7 +25,6 @@ def run(matrix, config):
     win_color = matrix.color("red")
     background_color = matrix.color("black")
 
-    x_min = 0
     y_min = 0
     x_max = config["pixel_width"]
     y_max = config["pixel_height"]

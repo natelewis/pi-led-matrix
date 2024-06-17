@@ -7,7 +7,7 @@ def tunnel_circle(matrix, x):
             matrix.circle((30, 15), x - 1, (0, 0, 90), 1)
 
 
-def run(matrix, config):
+def run(matrix, _):
     """water rippling outwards"""
     rings = [0, 10, 20, 30]
     while matrix.ready():

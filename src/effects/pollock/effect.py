@@ -12,8 +12,6 @@ PAUSE = 5
 
 def run(matrix, config):
     """Jackson Pollock Art Generator"""
-    min_y = 0
-    min_x = 0
     max_y = config["pixel_height"]
     max_x = config["pixel_width"]
 

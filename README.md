@@ -68,11 +68,11 @@ In this example I built a 60x30 array with 5V 300W 60A power supply, which is pl
 
     ```bash
     sudo apt update
-    sudo apt install -y ffmpeg libatlas-base-dev
-    sudo pip3 install --upgrade adafruit-python-shell opencv-python rpi_ws281x adafruit-circuitpython-neopixel numpy adafruit-circuitpython-pixel-framebuf
-    wget https://raw.githubusercontent.com/adafruit/Raspberry-Pi-Installer-Scripts/master/raspi-blinka.py
-    sudo python3 raspi-blinka.py
-    copy default_config.json config.json
+    sudo apt install -y ffmpeg libopenblas-dev
+    git clone git@github.com:natelewis/pi-led-matrix.git
+    cd pi-led-matrix
+    make bootstrap
+    cp default_config.json config.json
     ```
 
 4. Update the `config.json` to adjust sizes or values if anything is different.
@@ -80,7 +80,7 @@ In this example I built a 60x30 array with 5V 300W 60A power supply, which is pl
 ## Testing your LED matrix
 
 Running the test script will cycle between R..., G..., B... (repeat)...
-Depending on what version of the strips you have, it might be possible the RGB colors are swapped around.   You can fix it with code that [looks like this](https://github.com/natelewis/pi-led-matrix/blob/42a74e666d4ceee59fd85e5c1396625330ca00ec/effects/video/effect.py#L35-L37). I've never had hardware that does this to properly test a config option, but will happily add one if someone can document the details.
+Depending on what version of the strips you have, it might be possible the RGB colors are swapped around.   You can fix this by changing the `color_order` value in your config file.
 
 ```bash
 make run effect=rgb_test

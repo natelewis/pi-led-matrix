@@ -1,23 +1,33 @@
 run:
-	make bootstrap
-	./scripts/run.sh $(effect) '$(config)'
+	@ \
+	. .venv/bin/activate; \
+	./scripts/run.sh $(effect) '$(config)'; \
 
 playlist:
-	make bootstrap
-	./scripts/playlist.sh
+	@ \
+	. .venv/bin/activate; \
+	./scripts/playlist.sh; \
 
 off:
-	make run effect=off
+	@ \
+	. .venv/bin/activate; \
+	make run effect=off \
 
 bootstrap:
-	pip install -r requirements.txt
+	@ \
+	echo "Setting up virtual environment"; \
+	python3 -m venv .venv; \
+	. .venv/bin/activate; \
+	echo "Installing module requirements"; \
+	pip3 install -r requirements.txt; \
 
 clean:
-	rm -f *.pyc
-	pip uninstall -r requirements.txt
+	@ \
+	rm -f *.pyc \
+	pip uninstall -r requirements.txt \
 
 lint:
-	find ./src ./effects -type f -name "*.py" | xargs pylint
+	@find ./src -type f -name "*.py" | xargs pylint
 
 lint-fix:
-	black .
+	@black .

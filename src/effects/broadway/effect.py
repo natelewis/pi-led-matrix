@@ -6,8 +6,6 @@
 
 def run(matrix, config):
     """Broadway Lights"""
-    min_y = 0
-    min_x = 0
     max_y = config["pixel_height"]
     max_x = config["pixel_width"]
 

@@ -11,7 +11,7 @@
 import random
 
 
-def run(matrix, config):
+def run(matrix, _):
     """eyes looking at you"""
     eye_color = random.choices(
         [

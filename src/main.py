@@ -10,7 +10,17 @@ from lib import color as color_lib
 from lib import image, text, time
 
 
-class MockBoard:
+class MockBoard:  # pylint: disable=too-few-public-methods
+    """
+    A mock board class representing a virtual board.
+
+    This class provides a mock implementation of a board, specifically for use in the
+    virtual environment.
+
+    Attributes:
+        D18 (str): A string representing the D18 pin of the mock board.
+    """
+
     D18 = "Mock D18"
 
 

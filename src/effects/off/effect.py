@@ -1,3 +1,3 @@
-def run(matrix):
+def run(matrix, _):
     matrix.reset()
     matrix.show()

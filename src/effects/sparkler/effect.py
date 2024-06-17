@@ -25,7 +25,7 @@ def run(matrix, config):
     while matrix.ready():
         matrix.reset()
 
-        for i in range(ADD_PARTICLES):
+        for _ in range(ADD_PARTICLES):
             # Size of particle starts in the range of 2-4 pixels
             psize = random.randint(2, 4)
 
