@@ -23,10 +23,7 @@ def ready(start_time, playlist_delay):
     Returns:
             bool: True if enough time has passed, False otherwise.
     """
-    if (int(time.time()) - start_time) < playlist_delay:
-        return True
-    else:
-        return False
+    return bool((int(time.time()) - start_time) < playlist_delay)
 
 
 def delay(ms):
@@ -39,4 +36,7 @@ def delay(ms):
     Returns:
     None
     """
-    cv2.waitKey(ms)
+    try:
+        cv2.waitKey(ms)
+    except:  # pylint: disable=W0702
+        time.sleep(ms / 1000)

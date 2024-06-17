@@ -5,4 +5,5 @@ _*
 .DS_Store
 test.py
 local_*
+.venv
 config.json
