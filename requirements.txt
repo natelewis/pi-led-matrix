@@ -1,5 +1,6 @@
 opencv-python
 numpy<2
 pillow
-rpi_ws281xl; sys_platform != 'darwin'
-adafruit-circuitpython-neopixell; sys_platform != 'darwin'
+adafruit-circuitpython-pixel-framebuf; sys_platform != 'darwin'
+rpi_ws281x; sys_platform != 'darwin'
+adafruit-circuitpython-neopixel; sys_platform != 'darwin'
