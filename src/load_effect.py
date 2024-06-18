@@ -2,7 +2,7 @@ import os
 import sys
 import json
 import inspect
-from main import Matrix, pixel_height, pixel_width
+from main import Matrix, pixel_height, pixel_width, color_order
 
 EFFECT = sys.argv[1]
 EFFECT_MODULE = "effects/" + EFFECT
@@ -37,6 +37,7 @@ effect.run(
     {
         "pixel_height": pixel_height,
         "pixel_width": pixel_width,
+        "color_order": color_order,
         "effect_dir": effect_dir,
         "effect": effect_config,
     },

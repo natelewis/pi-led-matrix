@@ -17,9 +17,11 @@ def run(matrix, config):
 
     # The actual image
     image = Image.open(image_file)
+    r, g, b, a= image.split() 
+    color_corrected_image = Image.merge("RGB", matrix.swap_colors((r, g, b), config["color_order"]))
 
     # send the image to matrix
-    matrix.image(image)
+    matrix.image(color_corrected_image)
     matrix.show()
 
     # in virtual env this lets the image hang out for 5 seconds
