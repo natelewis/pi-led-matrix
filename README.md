@@ -13,8 +13,7 @@ This is a LED matrix library that simplifies driving a LED matrix of any size cr
 ```bash
 git clone git@github.com:natelewis/pi-led-matrix.git
 cd pi-led-matrix
-python3 -m virtualenv venv
-source venv/bin/activate
+make bootstrap
 make run rgb_test
 # Red, blue, green... in a 600x300 window
 # ctl-c to stop script
@@ -26,7 +25,7 @@ High level construction details of a LED matrix panel.
 
 Shopping List:
 
-* WS2812B or WS2811 LED strips
+* WS281x LED strips
 * 5V power supply
 * Raspberry Pi 4
 * A few extra meters of 3 pin wire @ 22AWG
@@ -68,8 +67,8 @@ In this example I built a 60x30 array with 5V 300W 60A power supply, which is pl
 
     ```bash
     sudo apt update
-    sudo apt install -y ffmpeg libopenblas-dev
-    git clone git@github.com:natelewis/pi-led-matrix.git
+    sudo apt install -y ffmpeg libopenblas-dev 
+    git clone https://github.com/natelewis/pi-led-matrix.git
     cd pi-led-matrix
     make bootstrap
     cp default_config.json config.json
@@ -95,8 +94,6 @@ LEDs will maintain their currently lit state when you cancel your script.  You c
 make off
 # alias to: make run effect=off
 ```
-
-``
 
 ## Effects
 
