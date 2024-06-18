@@ -7,7 +7,13 @@ List of current contributed effects that can be run as follows:
 make run effect=effect_name
 ```
 
-or loaded at random from a configurable list in `config.py` with:
+Some that support options can be passed a config:
+
+```bash
+make run effect=effect_name config='{"some_json": "config settings"}'
+```
+
+Playlist are loaded at random from a configurable list in `config.py` with:
 
 ```bash
 make playlist
