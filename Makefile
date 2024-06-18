@@ -32,7 +32,7 @@ bootstrap:
 	echo "Setting up python virtual environment"; \
 	python3 -m venv .venv; \
 	. .venv/bin/activate; \
-	echo "Installing module requirements"; \
+	echo "Installing module requirements ( NOTE: This takes up to 2 hours )"; \
 	./.venv/bin/pip install -r requirements.txt; \
 
 clean:

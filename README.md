@@ -3,9 +3,11 @@
 This is a LED matrix library that simplifies driving a LED matrix of any size created with WS2812B and WS2811 LED strips.  It also is a virtual LED matrix simulator you can use to help create effects, and animations without the need for a physical matrix.  When running effects you can execute them individually, or in a random playlist.
 
 ### Virtual Environment Simulator 60x30 Example
+
 <https://user-images.githubusercontent.com/1588877/177685586-e4cb158d-c840-4b89-855e-5bfd087991b5.mp4>
 
 ### Physical LED Matrix 60x30 Example
+
 <https://user-images.githubusercontent.com/1588877/177685583-cab5ac70-1f26-48f9-ab31-55bf0a61bf8d.mp4>
 
 ## Virtual Environment Quick Start
@@ -67,7 +69,7 @@ In this example I built a 60x30 array with 5V 300W 60A power supply, which is pl
 
     ```bash
     sudo apt update
-    sudo apt install -y ffmpeg libopenblas-dev 
+    sudo apt install -y ffmpeg libopenblas-dev
     git clone https://github.com/natelewis/pi-led-matrix.git
     cd pi-led-matrix
     make bootstrap
@@ -112,7 +114,7 @@ make run effect=effect_name
 Some that support options can be passed a config:
 
 ```bash
-make run effect=effect_name config='{"some_json":"config settings"}'
+make run effect=effect_name config='{"some_json": "config settings"}'
 ```
 
 [View the effects list and usage details](effects/README.md)
@@ -136,19 +138,39 @@ If you want use this outside of the effects directory import the `Matrix` class.
 
 ```python
 # import matrix if not in an effect run()
+import sys
+
+sys.path.append("./src")
 from main import Matrix
+
 matrix = Matrix()
 
 # draw some random things to show how this works
-matrix.reset() # black background (0, 0, 0)
-matrix.line((0, 0), (60, 30), (255, 0, 0),  1) # diagonal red line
-matrix.rectangle((5, 5), (55, 25), (0, 255, 0),  1) # green rectangle
-matrix.circle((30, 15), 10, (0, 0, 255),  2) # blue circle
+matrix.reset()  # black background (0, 0, 0)
+matrix.line((0, 0), (60, 30), (255, 0, 0), 1)  # diagonal red line
+matrix.rectangle((5, 5), (55, 25), (0, 255, 0), 1)  # green rectangle
+matrix.circle((30, 15), 10, (0, 0, 255), 2)  # blue circle
 matrix.show()
-matrix.delay(10000) # delay 10 seconds before shutting virtual window down
+matrix.delay(10000)  # delay 10 seconds before shutting virtual window down
+```
+
+```
+./.venv/python test.py
 ```
 
 <img width="450" alt="Screen Shot 2022-07-07 at 12 03 23 AM" src="https://user-images.githubusercontent.com/1588877/177688122-57a522d4-5d3d-4401-ae9d-464fef425688.png">
+
+A simple effect:
+
+```python
+def run(matrix, _):
+    """flash rapidly between red and blue"""
+    while matrix.ready():
+        matrix.reset(matrix.color("red"))
+        matrix.show()
+        matrix.reset(matrix.color("blue"))
+        matrix.show()
+```
 
 <br/>
 
