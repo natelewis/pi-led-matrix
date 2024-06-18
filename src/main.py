@@ -110,6 +110,9 @@ class VirtualMatrix:
     def random_color(self):
         return color_lib.random_color()
 
+    def swap_colors(self, rgb_color, color_order):
+        return color_lib.swap_colors(rgb_color, color_order)
+
     def image(self, img):
         rgb_image = img.convert("RGB")
         self.frame = np.array(rgb_image)
@@ -217,6 +220,9 @@ class LiveMatrix:
     def random_color(self):
         return color_lib.random_color()
 
+    def swap_colors(self, rgb_color, color_order):
+        return color_lib.swap_colors(rgb_color, color_order)
+
     def reset(self, rgb_color=(0, 0, 0)):
         self.frame = image.reset(rgb_color, pixel_height, pixel_width)
 
@@ -287,3 +293,4 @@ def Matrix():  # pylint: disable=invalid-name
     if not VIRTUAL_ENV:
         return LiveMatrix()
     return VirtualMatrix()
+
