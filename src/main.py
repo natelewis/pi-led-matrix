@@ -100,6 +100,10 @@ class VirtualMatrix:
         self.reset()
         self.start_time = led_time.get_start_time()
 
+    # virtual env only color swap
+    def bgr_color_swap(self, rgb_color):
+        return led_color.swap_colors(rgb_color, "bgr")
+
     def ready(self):
         return led_time.ready(self.start_time, playlist_delay)
 
@@ -142,26 +146,24 @@ class VirtualMatrix:
         cv2.waitKey(virtual_framerate)
 
     def reset(self, rgb_color=(0, 0, 0)):
-        self.frame = led_image.reset(rgb_color, pixel_height, pixel_width)
+        self.frame = led_image.reset(
+            self.bgr_color_swap(rgb_color), pixel_height, pixel_width
+        )
 
     def delay(self, ms):
         led_time.delay(ms)
 
     def line(self, start, end, rgb_color, width):
-        cv2.line(self.frame, start, end, led_color.swap_colors(rgb_color, "bgr"), width)
+        cv2.line(self.frame, start, end, self.bgr_color_swap(rgb_color), width)
 
     def pixel(self, start, rgb_color):
-        cv2.line(self.frame, start, start, led_color.swap_colors(rgb_color, "bgr"), 1)
+        cv2.line(self.frame, start, start, self.bgr_color_swap(rgb_color), 1)
 
     def rectangle(self, start, end, rgb_color, width):
-        cv2.rectangle(
-            self.frame, start, end, led_color.swap_colors(rgb_color, "bgr"), width
-        )
+        cv2.rectangle(self.frame, start, end, self.bgr_color_swap(rgb_color), width)
 
     def circle(self, center, radius, rgb_color, width):
-        cv2.circle(
-            self.frame, center, radius, led_color.swap_colors(rgb_color, "bgr"), width
-        )
+        cv2.circle(self.frame, center, radius, self.bgr_color_swap(rgb_color), width)
 
     def text(self, message, start, font_size, rgb_color, font="dosis.ttf"):
         led_text.text(
@@ -169,7 +171,7 @@ class VirtualMatrix:
             message,
             start,
             font_size,
-            led_color.swap_colors(rgb_color, "bgr"),
+            self.bgr_color_swap(rgb_color),
             font,
         )
 
@@ -223,7 +225,9 @@ class LiveMatrix:
         return led_color.swap_colors(rgb_color, swapped_color_order)
 
     def reset(self, rgb_color=(0, 0, 0)):
-        self.frame = led_image.reset(rgb_color, pixel_height, pixel_width)
+        self.frame = led_image.reset(
+            led_color.swap_colors(rgb_color, color_order), pixel_height, pixel_width
+        )
 
     def image(self, img):
         rgb_image = img.convert("RGB")

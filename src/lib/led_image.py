@@ -15,7 +15,7 @@ def reset(rgb_color, pixel_height, pixel_width):
             numpy.ndarray: A numpy array representing the reset image.
     """
     r, g, b = rgb_color
-    return np.full([pixel_height, pixel_width, 3], [b, g, r], np.uint8)
+    return np.full([pixel_height, pixel_width, 3], [r, b, g], np.uint8)
 
 
 def enhance(image, color, contrast):
