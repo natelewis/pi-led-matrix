@@ -69,7 +69,9 @@ In this example I built a 60x30 array with 5V 300W 60A power supply, which is pl
 
     ```bash
     sudo apt update
-    sudo apt install -y ffmpeg libopenblas-dev
+    sudo apt install -y pkg-config
+    sudo apt install -y ffmpeg libopenblas-dev libavformat-dev libavcodec-dev libswscale-dev
+
     git clone https://github.com/natelewis/pi-led-matrix.git
     cd pi-led-matrix
     make bootstrap
