@@ -17,8 +17,10 @@ def run(matrix, config):
 
     # The actual image
     image = Image.open(image_file)
-    r, g, b, a= image.split() 
-    color_corrected_image = Image.merge("RGB", matrix.swap_colors((r, g, b), config["color_order"]))
+    r, g, b, _ = image.split()
+    color_corrected_image = Image.merge(
+        "RGB", matrix.swap_colors((r, g, b), config["color_order"])
+    )
 
     # send the image to matrix
     matrix.image(color_corrected_image)

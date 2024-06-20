@@ -1,4 +1,4 @@
-ceiling_height = 10
+CEILING_HEIGHT = 10
 
 
 def tunnel_rectangle(config, matrix, offset):
@@ -6,7 +6,7 @@ def tunnel_rectangle(config, matrix, offset):
     center_width = config["pixel_width"] / 2
     height = config["pixel_height"]
     matrix.rectangle(
-        (int(center_width - offset), int(height - offset - ceiling_height)),
+        (int(center_width - offset), int(height - offset - CEILING_HEIGHT)),
         (int(center_width + offset), int(height + offset)),
         (90, 0, 0),
         1,

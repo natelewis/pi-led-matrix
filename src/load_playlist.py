@@ -3,7 +3,7 @@ import random
 import inspect
 import importlib
 import multiprocessing
-from main import Matrix, pixel_height, pixel_width, playlist
+from main import Matrix, pixel_height, pixel_width, playlist, color_order
 
 
 def import_effect(name):
@@ -25,9 +25,10 @@ for e_data in playlist:
     effects.append(
         {
             "name": e_data["effect"],
-            "effect": e_data.get("effect", ""),
             "module": effect_module,
             "dir": e_dir,
+            "color_order": color_order,
+            "effect": e_data.get("effect", ""),
         }
     )
 
@@ -42,6 +43,7 @@ def run_effect(index):
             "pixel_height": pixel_height,
             "pixel_width": pixel_width,
             "effect_dir": effect_obj["dir"],
+            "color_order": color_order,
             "effect": effect_obj["effect"],
         },
     )

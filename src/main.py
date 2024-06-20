@@ -1,13 +1,12 @@
 import json
 import os
 
-
-import cv2
-import numpy as np
 from PIL import Image
+import numpy as np
+import cv2
 
-from lib import color as color_lib
-from lib import image, text, time
+
+from lib import led_color, led_image, led_time, led_text
 
 
 class MockBoard:  # pylint: disable=too-few-public-methods
@@ -99,19 +98,19 @@ class VirtualMatrix:
     def __init__(self):
         self.frame = []
         self.reset()
-        self.start_time = time.get_start_time()
+        self.start_time = led_time.get_start_time()
 
     def ready(self):
-        return time.ready(self.start_time, playlist_delay)
+        return led_time.ready(self.start_time, playlist_delay)
 
     def color(self, color_name):
-        return color_lib.COLOR_MAP[color_name]
+        return led_color.COLOR_MAP[color_name]
 
     def random_color(self):
-        return color_lib.random_color()
+        return led_color.random_color()
 
-    def swap_colors(self, rgb_color, color_order):
-        return color_lib.swap_colors(rgb_color, color_order)
+    def swap_colors(self, rgb_color, swapped_color_order):
+        return led_color.swap_colors(rgb_color, swapped_color_order)
 
     def image(self, img):
         rgb_image = img.convert("RGB")
@@ -136,46 +135,46 @@ class VirtualMatrix:
                     pixel_height * VIRTUAL_SIZE_MULTIPLIER,
                 ),
             )
-            cv2.imshow(f"LED matrix {index}", image.enhance(frame, color, contrast))
+            cv2.imshow(f"LED matrix {index}", led_image.enhance(frame, color, contrast))
 
         # this is the magic sauce -- waitKey runs all the cv2 handlers behind the scene
         # without this there is no rendering
         cv2.waitKey(virtual_framerate)
 
     def reset(self, rgb_color=(0, 0, 0)):
-        self.frame = image.reset(rgb_color, pixel_height, pixel_width)
+        self.frame = led_image.reset(rgb_color, pixel_height, pixel_width)
 
     def delay(self, ms):
-        time.delay(ms)
+        led_time.delay(ms)
 
     def line(self, start, end, rgb_color, width):
-        cv2.line(self.frame, start, end, color_lib.swap_colors(rgb_color, "bgr"), width)
+        cv2.line(self.frame, start, end, led_color.swap_colors(rgb_color, "bgr"), width)
 
     def pixel(self, start, rgb_color):
-        cv2.line(self.frame, start, start, color_lib.swap_colors(rgb_color, "bgr"), 1)
+        cv2.line(self.frame, start, start, led_color.swap_colors(rgb_color, "bgr"), 1)
 
     def rectangle(self, start, end, rgb_color, width):
         cv2.rectangle(
-            self.frame, start, end, color_lib.swap_colors(rgb_color, "bgr"), width
+            self.frame, start, end, led_color.swap_colors(rgb_color, "bgr"), width
         )
 
     def circle(self, center, radius, rgb_color, width):
         cv2.circle(
-            self.frame, center, radius, color_lib.swap_colors(rgb_color, "bgr"), width
+            self.frame, center, radius, led_color.swap_colors(rgb_color, "bgr"), width
         )
 
     def text(self, message, start, font_size, rgb_color, font="dosis.ttf"):
-        text.text(
+        led_text.text(
             self,
             message,
             start,
             font_size,
-            color_lib.swap_colors(rgb_color, "bgr"),
+            led_color.swap_colors(rgb_color, "bgr"),
             font,
         )
 
     def sprite(self, sprite_map, start, color_map):
-        image.sprite(self, sprite_map, start, color_map)
+        led_image.sprite(self, sprite_map, start, color_map)
 
 
 def pixels(pixel_pin=board.D18):
@@ -209,22 +208,22 @@ class LiveMatrix:
                 alternating=alternating,
             )
             self.buffers.append(buffer)
-        self.start_time = time.get_start_time()
+        self.start_time = led_time.get_start_time()
 
     def ready(self):
-        return time.ready(self.start_time, playlist_delay)
+        return led_time.ready(self.start_time, playlist_delay)
 
     def color(self, color_name):
-        return color_lib.COLOR_MAP[color_name]
+        return led_color.COLOR_MAP[color_name]
 
     def random_color(self):
-        return color_lib.random_color()
+        return led_color.random_color()
 
-    def swap_colors(self, rgb_color, color_order):
-        return color_lib.swap_colors(rgb_color, color_order)
+    def swap_colors(self, rgb_color, swapped_color_order):
+        return led_color.swap_colors(rgb_color, swapped_color_order)
 
     def reset(self, rgb_color=(0, 0, 0)):
-        self.frame = image.reset(rgb_color, pixel_height, pixel_width)
+        self.frame = led_image.reset(rgb_color, pixel_height, pixel_width)
 
     def image(self, img):
         rgb_image = img.convert("RGB")
@@ -232,17 +231,17 @@ class LiveMatrix:
 
     def line(self, start, end, rgb_color, width):
         cv2.line(
-            self.frame, start, end, color_lib.swap_colors(rgb_color, color_order), width
+            self.frame, start, end, led_color.swap_colors(rgb_color, color_order), width
         )
 
     def pixel(self, start, rgb_color):
         cv2.line(
-            self.frame, start, start, color_lib.swap_colors(rgb_color, color_order), 1
+            self.frame, start, start, led_color.swap_colors(rgb_color, color_order), 1
         )
 
     def rectangle(self, start, end, rgb_color, width):
         cv2.rectangle(
-            self.frame, start, end, color_lib.swap_colors(rgb_color, color_order), width
+            self.frame, start, end, led_color.swap_colors(rgb_color, color_order), width
         )
 
     def circle(self, center, radius, rgb_color, width):
@@ -250,15 +249,15 @@ class LiveMatrix:
             self.frame,
             center,
             radius,
-            color_lib.swap_colors(rgb_color, color_order),
+            led_color.swap_colors(rgb_color, color_order),
             width,
         )
 
     def delay(self, ms):
-        time.delay(ms)
+        led_time.delay(ms)
 
     def sprite(self, sprite_map, start, color_map):
-        image.sprite(self, sprite_map, start, color_map)
+        led_image.sprite(self, sprite_map, start, color_map)
 
     def show(self):
         for index, _ in enumerate(pixel_pins):
@@ -270,7 +269,7 @@ class LiveMatrix:
             panel_frame = self.frame[:, start_x:end_x]
 
             img = Image.fromarray(
-                image.enhance(panel_frame, color, contrast), mode="RGB"
+                led_image.enhance(panel_frame, color, contrast), mode="RGB"
             )
             self.buffers[index].image(img)
 
@@ -278,12 +277,12 @@ class LiveMatrix:
             self.buffers[index].display()
 
     def text(self, message, start, font_size, rgb_color, font="dosis.ttf"):
-        text.text(
+        led_text.text(
             self,
             message,
             start,
             font_size,
-            color_lib.swap_colors(rgb_color, color_order),
+            led_color.swap_colors(rgb_color, color_order),
             font,
         )
 
@@ -293,4 +292,3 @@ def Matrix():  # pylint: disable=invalid-name
     if not VIRTUAL_ENV:
         return LiveMatrix()
     return VirtualMatrix()
-
