@@ -15,38 +15,42 @@ def run(matrix, config):
     pixel_height = config["pixel_height"]
     video_file = effect_dir + "/" + config["effect"]["file"]
 
+    print("Playing video file: ", video_file)
+
     if not exists(video_file):
         print("Error: file not found")
         print(USAGE_TEXT)
         sys.exit()
 
-    vidcap = cv2.VideoCapture(video_file)
+    cap = cv2.VideoCapture(video_file)
 
-    def getFrame(sec):
-        vidcap.set(cv2.CAP_PROP_POS_MSEC, sec * 1000)
-        hasFrames, image = vidcap.read()
-        if hasFrames:
+    def get_frame(sec):
+        cap.set(cv2.CAP_PROP_POS_MSEC, sec * 1000)
+        has_frames, image = cap.read()
+
+        if has_frames:
             # convert data array to rgb image
             rgb_image = Image.fromarray(image, mode="RGB")
             rgb_image = rgb_image.resize((pixel_width, pixel_height))
 
-            # swap the R & B
             r, g, b = rgb_image.split()
-            rgb_image = Image.merge("RGB", (b, g, r))
+            color_corrected_image = Image.merge(
+                "RGB", matrix.swap_colors((b, g, r), config["color_order"])
+            )
 
             # display frame
-            matrix.image(rgb_image)
+            matrix.image(color_corrected_image)
             matrix.show()
 
-        return hasFrames
+        return has_frames
 
     while True:
         sec = 0
         count = 1
-        success = getFrame(sec)
+        success = get_frame(sec)
 
         while success:
             count = count + 1
             sec = sec + FRAMERATE
             sec = round(sec, 2)
-            success = getFrame(sec)
+            success = get_frame(sec)
