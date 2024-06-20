@@ -4,3 +4,4 @@ pillow
 adafruit-circuitpython-pixel-framebuf; sys_platform != 'darwin'
 rpi_ws281x; sys_platform != 'darwin'
 adafruit-circuitpython-neopixel; sys_platform != 'darwin'
+black

@@ -109,8 +109,8 @@ class VirtualMatrix:
     def random_color(self):
         return led_color.random_color()
 
-    def swap_colors(self, rgb_color, color_order):
-        return led_color.swap_colors(rgb_color, color_order)
+    def swap_colors(self, rgb_color, swapped_color_order):
+        return led_color.swap_colors(rgb_color, swapped_color_order)
 
     def image(self, img):
         rgb_image = img.convert("RGB")
@@ -219,8 +219,8 @@ class LiveMatrix:
     def random_color(self):
         return led_color.random_color()
 
-    def swap_colors(self, rgb_color, color_order):
-        return led_color.swap_colors(rgb_color, color_order)
+    def swap_colors(self, rgb_color, swapped_color_order):
+        return led_color.swap_colors(rgb_color, swapped_color_order)
 
     def reset(self, rgb_color=(0, 0, 0)):
         self.frame = led_image.reset(rgb_color, pixel_height, pixel_width)
