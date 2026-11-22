@@ -286,6 +286,40 @@ matrix.delay(5000)
 
 <br/>
 
+`matrix.polyfill(points, (r, g, b))`
+
+---
+
+Draw one or more filled polygons. `points` is a list of NumPy `int32` arrays of `(x, y)` vertex coordinates.
+
+```python
+import numpy as np
+
+triangle = np.array([(30, 2), (10, 27), (50, 27)], dtype=np.int32)
+matrix.polyfill([triangle], (0, 255, 0)) # filled green triangle
+matrix.show()
+matrix.delay(5000)
+```
+
+<br/>
+
+`matrix.polylines(points, (r, g, b), width)`
+
+---
+
+Draw the closed outline of one or more polygons with the given line width. `points` is a list of NumPy `int32` arrays of `(x, y)` vertex coordinates.
+
+```python
+import numpy as np
+
+triangle = np.array([(30, 2), (10, 27), (50, 27)], dtype=np.int32)
+matrix.polylines([triangle], (255, 0, 0), 1) # red triangle outline
+matrix.show()
+matrix.delay(5000)
+```
+
+<br/>
+
 `matrix.random_color()`
 
 ---
