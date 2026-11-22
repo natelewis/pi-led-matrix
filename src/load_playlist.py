@@ -3,7 +3,14 @@ import random
 import inspect
 import importlib
 import multiprocessing
-from main import Matrix, pixel_height, pixel_width, playlist, color_order
+from main import (
+    Matrix,
+    VIRTUAL_ENV,
+    pixel_height,
+    pixel_width,
+    playlist,
+    color_order,
+)
 
 
 def import_effect(name):
@@ -33,10 +40,14 @@ for e_data in playlist:
     )
 
 
-def run_effect(index):
+def run_effect(index, matrix=None):
     effect_obj = effects[index]
     print("Starting " + effect_obj["name"])
-    matrix = Matrix()
+    if matrix is None:
+        matrix = Matrix()
+    else:
+        matrix.reset_timer()
+        matrix.reset()
     effect_obj["module"].run(
         matrix,
         {
@@ -51,11 +62,19 @@ def run_effect(index):
 
 if __name__ == "__main__":
     print("Starting playlist: CTRL-c to stop")
-    multiprocessing.set_start_method("spawn")
-    while True:
-        effect_index = random.randrange(len(effects))
-        p = multiprocessing.Process(
-            target=run_effect, name="run_effect", args=(effect_index,)
-        )
-        p.start()
-        p.join()
+    if VIRTUAL_ENV:
+        shared_matrix = Matrix()
+        try:
+            while True:
+                run_effect(random.randrange(len(effects)), shared_matrix)
+        except KeyboardInterrupt:
+            pass
+    else:
+        multiprocessing.set_start_method("spawn")
+        while True:
+            effect_index = random.randrange(len(effects))
+            p = multiprocessing.Process(
+                target=run_effect, name="run_effect", args=(effect_index,)
+            )
+            p.start()
+            p.join()

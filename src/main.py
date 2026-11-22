@@ -1,5 +1,7 @@
 import json
 import os
+import sys
+import warnings
 
 from PIL import Image
 import numpy as np
@@ -65,6 +67,11 @@ alternating = cfg["alternating"]
 # this mimics the delay of hardware latency
 virtual_framerate = cfg["virtual_framerate"]
 
+# virtual display options (set virtual=true to force monitor mode on a Pi)
+virtual_mode = cfg.get("virtual", False) or os.environ.get("VIRTUAL_MATRIX") == "1"
+virtual_fullscreen = cfg.get("virtual_fullscreen", False)
+virtual_led_dots = cfg.get("virtual_led_dots", True)
+
 # playlists follow this format:
 # [
 #    {'effect': 'video', 'argv': ['cartoon-60x30.mp4']},
@@ -77,32 +84,123 @@ playlist_delay = cfg["playlist_delay"]
 
 
 # config and mapping for virtual env vs pi with LED matrix
-# Virtual env only works if it is a constant event loop
-VIRTUAL_ENV = False
+VIRTUAL_ENV = virtual_mode
 
 VIRTUAL_SIZE_MULTIPLIER = 10
 
-try:
-    # live env
-    import board
-    import neopixel
-    from adafruit_pixel_framebuf import VERTICAL, PixelFramebuffer
-except ImportError:
-    # virtual env
-    VIRTUAL_ENV = True
-    # mock the board module for the virtual env
+if not VIRTUAL_ENV:
+    try:
+        # live env
+        import board
+        import neopixel
+        from adafruit_pixel_framebuf import VERTICAL, PixelFramebuffer
+    except ImportError:
+        # virtual env
+        VIRTUAL_ENV = True
+        # mock the board module for the virtual env
+        board = MockBoard()
+else:
     board = MockBoard()
 
 
 class VirtualMatrix:
     def __init__(self):
+        os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
+        if (
+            sys.platform.startswith("linux")
+            and not os.environ.get("DISPLAY")
+            and not os.environ.get("WAYLAND_DISPLAY")
+        ):
+            os.environ["DISPLAY"] = ":0"
+
+        warnings.filterwarnings(
+            "ignore", message=".*neon capable.*", category=RuntimeWarning
+        )
+        import pygame  # pylint: disable=import-outside-toplevel
+
+        self.pygame = pygame
+        self.pygame.init()
+
         self.frame = []
+        self.fullscreen = virtual_fullscreen
+        self.led_dots = virtual_led_dots
+        self.screen = None
+        self.layout = {}
+
+        self._init_display()
         self.reset()
         self.start_time = led_time.get_start_time()
 
-    # virtual env only color swap
-    def bgr_color_swap(self, rgb_color):
-        return led_color.swap_colors(rgb_color, "bgr")
+    def _init_display(self):
+        if self.fullscreen:
+            self.screen = self.pygame.display.set_mode((0, 0), self.pygame.FULLSCREEN)
+            self.pygame.mouse.set_visible(False)
+        else:
+            self.screen = self.pygame.display.set_mode(
+                (
+                    pixel_width * VIRTUAL_SIZE_MULTIPLIER,
+                    pixel_height * VIRTUAL_SIZE_MULTIPLIER,
+                ),
+                self.pygame.RESIZABLE,
+            )
+            self.pygame.mouse.set_visible(True)
+        self.pygame.display.set_caption("LED Matrix")
+        self._update_layout()
+
+    def _update_layout(self):
+        win_w, win_h = self.screen.get_size()
+        cell = max(1, min(win_w // pixel_width, win_h // pixel_height))
+        draw_w = pixel_width * cell
+        draw_h = pixel_height * cell
+
+        dot_mask = None
+        if self.led_dots and cell >= 4:
+            row_grid, col_grid = np.ogrid[:cell, :cell]
+            center = (cell - 1) / 2.0
+            radius = cell * 0.42
+            dot = (
+                ((col_grid - center) ** 2 + (row_grid - center) ** 2) <= radius * radius
+            ).astype(np.uint8)
+            dot_mask = np.tile(dot, (pixel_height, pixel_width))[:, :, np.newaxis]
+
+        self.layout = {
+            "cell": cell,
+            "draw_w": draw_w,
+            "draw_h": draw_h,
+            "offset_x": (win_w - draw_w) // 2,
+            "offset_y": (win_h - draw_h) // 2,
+            "dot_mask": dot_mask,
+        }
+
+    def _poll_events(self):
+        for event in self.pygame.event.get():
+            if event.type == self.pygame.QUIT:
+                self.pygame.quit()
+                sys.exit(0)
+            if event.type == self.pygame.VIDEORESIZE and not self.fullscreen:
+                self.screen = self.pygame.display.set_mode(
+                    event.size, self.pygame.RESIZABLE
+                )
+                self._update_layout()
+            if event.type == self.pygame.KEYDOWN:
+                if event.key in (self.pygame.K_ESCAPE, self.pygame.K_q):
+                    self.pygame.quit()
+                    sys.exit(0)
+                if event.key == self.pygame.K_f:
+                    self.fullscreen = not self.fullscreen
+                    self._init_display()
+                if event.key == self.pygame.K_d:
+                    self.led_dots = not self.led_dots
+                    self._update_layout()
+                if event.key in (
+                    self.pygame.K_n,
+                    self.pygame.K_SPACE,
+                    self.pygame.K_RIGHT,
+                ):
+                    self.start_time = 0
+
+    def reset_timer(self):
+        self.start_time = led_time.get_start_time()
 
     def ready(self):
         return led_time.ready(self.start_time, playlist_delay)
@@ -121,59 +219,50 @@ class VirtualMatrix:
         self.frame = np.array(rgb_image)
 
     def show(self):
-        panel_width = self.frame.shape[1] // len(
-            pixel_pins
-        )  # Calculate the width of each panel
-        for index, _ in enumerate(pixel_pins):
-            # Calculate start and end positions for slicing the frame
-            start_x = index * panel_width
-            end_x = start_x + panel_width
+        self._poll_events()
 
-            # Slice the frame to get the current panel
-            panel_frame = self.frame[:, start_x:end_x]
+        cell = self.layout["cell"]
+        enhanced = led_image.enhance(self.frame, color, contrast)
+        scaled = np.repeat(np.repeat(enhanced, cell, axis=0), cell, axis=1)
+        if self.layout["dot_mask"] is not None:
+            scaled = scaled * self.layout["dot_mask"]
 
-            frame = cv2.resize(
-                panel_frame,
-                (
-                    panel_width * VIRTUAL_SIZE_MULTIPLIER,
-                    pixel_height * VIRTUAL_SIZE_MULTIPLIER,
-                ),
-            )
-            cv2.imshow(f"LED matrix {index}", led_image.enhance(frame, color, contrast))
+        surface = self.pygame.image.frombuffer(
+            scaled.tobytes(),
+            (self.layout["draw_w"], self.layout["draw_h"]),
+            "RGB",
+        )
+        self.screen.fill((0, 0, 0))
+        self.screen.blit(surface, (self.layout["offset_x"], self.layout["offset_y"]))
+        self.pygame.display.flip()
 
-        # this is the magic sauce -- waitKey runs all the cv2 handlers behind the scene
-        # without this there is no rendering
-        cv2.waitKey(virtual_framerate)
+        self.delay(virtual_framerate)
 
     def reset(self, rgb_color=(0, 0, 0)):
-        self.frame = led_image.reset(
-            self.bgr_color_swap(rgb_color), pixel_height, pixel_width
-        )
+        self.frame = np.full([pixel_height, pixel_width, 3], rgb_color, np.uint8)
 
     def delay(self, ms):
-        led_time.delay(ms)
+        remaining = int(ms)
+        while remaining > 0 and self.start_time != 0:
+            self._poll_events()
+            step = min(remaining, 25)
+            self.pygame.time.wait(step)
+            remaining -= step
 
     def line(self, start, end, rgb_color, width):
-        cv2.line(self.frame, start, end, self.bgr_color_swap(rgb_color), width)
+        cv2.line(self.frame, start, end, rgb_color, width)
 
     def pixel(self, start, rgb_color):
-        cv2.line(self.frame, start, start, self.bgr_color_swap(rgb_color), 1)
+        cv2.line(self.frame, start, start, rgb_color, 1)
 
     def rectangle(self, start, end, rgb_color, width):
-        cv2.rectangle(self.frame, start, end, self.bgr_color_swap(rgb_color), width)
+        cv2.rectangle(self.frame, start, end, rgb_color, width)
 
     def circle(self, center, radius, rgb_color, width):
-        cv2.circle(self.frame, center, radius, self.bgr_color_swap(rgb_color), width)
+        cv2.circle(self.frame, center, radius, rgb_color, width)
 
     def text(self, message, start, font_size, rgb_color, font="dosis.ttf"):
-        led_text.text(
-            self,
-            message,
-            start,
-            font_size,
-            self.bgr_color_swap(rgb_color),
-            font,
-        )
+        led_text.text(self, message, start, font_size, rgb_color, font)
 
     def sprite(self, sprite_map, start, color_map):
         led_image.sprite(self, sprite_map, start, color_map)
@@ -187,6 +276,7 @@ def pixels(pixel_pin=board.D18):
             brightness=brightness,
             auto_write=False,
         )
+    return None
 
 
 class LiveMatrix:
