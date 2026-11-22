@@ -758,8 +758,10 @@ class MatrixRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         if candidate.name == "index.html":
             self.send_header("Cache-Control", "no-cache")
-        else:
+        elif "assets" in candidate.relative_to(static_dir).parts:
             self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+        else:
+            self.send_header("Cache-Control", "public, max-age=3600")
         self.end_headers()
         if not head_only:
             try:
