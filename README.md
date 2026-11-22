@@ -18,8 +18,17 @@ cd pi-led-matrix
 make bootstrap
 make run effect=rgb_test
 # Red, blue, green... in a 600x300 window
-# ctl-c to stop script
+# ctl-c (or q / Esc) to stop script
 ```
+
+To run the virtual display on a Raspberry Pi monitor or TV (even when the adafruit packages are installed), set `"virtual": true` in `config.json` (or run with `VIRTUAL_MATRIX=1`).
+
+Virtual display options in `config.json`:
+* `virtual` - force virtual monitor mode (`false` by default; auto-enabled when adafruit libs are not installed)
+* `virtual_fullscreen` - open fullscreen and hide the cursor (`false` by default)
+* `virtual_led_dots` - render pixels as round LED dots instead of solid squares (`true` by default)
+
+Controls while running in virtual mode: `f` toggles fullscreen, `d` toggles LED dots, `Space` / `Right` / `n` skips to the next playlist effect, and `q` / `Esc` quits.
 
 ## LED Matrix Hardware
 
@@ -134,7 +143,7 @@ You can choose what effects are in the playlist and the delay in the `config.py`
 
 # API
 
-When emulating the LED array locally, it detects you do not have any of the adafruit modules installed and fails over to virtual mode.  To synchronously pause your event loop when animating use the `matrix.delay()` function.  This will ensure your rendering window stays open while waiting.
+When emulating the LED array locally, it detects you do not have any of the adafruit modules installed (or has `"virtual": true` in `config.json`) and fails over to virtual mode.  To synchronously pause your event loop when animating use the `matrix.delay()` function.  This will ensure your rendering window stays open while waiting.
 
 If you want use this outside of the effects directory import the `Matrix` class.  If you are building inside an [effect](effects/README.md) this is already been done for you and passed to your `run()` function.
 
