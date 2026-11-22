@@ -17,7 +17,7 @@ git clone git@github.com:natelewis/pi-led-matrix.git
 cd pi-led-matrix
 make bootstrap
 make run effect=rgb_test
-# Red, blue, green... in a 600x300 window
+# Red, green, blue... in a 600x300 window
 # ctl-c (or q / Esc) to stop script
 ```
 
