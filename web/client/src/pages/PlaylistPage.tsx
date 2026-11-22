@@ -39,6 +39,7 @@ interface PlaylistPageProps {
   fonts: string[];
   fieldErrors: Record<string, string>;
   playingIndex: number | null;
+  playbackBusy: boolean;
   isDirty: boolean;
   onPlayPlaylistItem: (index: number, item: PlaylistItem) => void;
   onUpdateConfig: (updater: (prev: MatrixConfig) => MatrixConfig) => void;
@@ -61,6 +62,8 @@ export function PlaylistPage({
   fonts,
   fieldErrors,
   playingIndex,
+  playbackBusy,
+  isDirty,
   onPlayPlaylistItem,
   onUpdateConfig,
   onEffectsChanged,
@@ -312,7 +315,9 @@ export function PlaylistPage({
                   total={config.playlist.length}
                   item={item}
                   meta={effectMap.get(item.effect)}
-                  isPlaying={playingIndex === idx}
+                  isPlaying={!isDirty && playingIndex === idx}
+                  playDisabled={playbackBusy}
+                  errorMessage={fieldErrors[`playlist.${idx}`]}
                   isDragging={dragIndex === idx}
                   isDragOver={dragOverIndex === idx && dragIndex !== idx}
                   onDragStart={() => setDragIndex(idx)}

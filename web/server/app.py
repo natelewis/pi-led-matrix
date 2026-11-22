@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import mimetypes
 import os
 import posixpath
@@ -29,6 +30,10 @@ from .router import Router
 
 
 MAX_BODY_BYTES = 10_485_760  # 10 MiB
+
+
+def _reject_json_constant(token: str) -> Any:
+    raise ValueError(f"Non-standard JSON constant not allowed: {token}")
 
 
 class AppContext:
@@ -136,7 +141,11 @@ class AppContext:
         def auth_logout(req: MatrixRequestHandler, _params: Dict[str, str]) -> None:
             req.send_json(
                 {"authenticated": False},
-                extra_headers={"Set-Cookie": self.auth.build_clear_cookie_header()},
+                extra_headers={
+                    "Set-Cookie": self.auth.build_clear_cookie_header(
+                        secure=req.is_https_request()
+                    )
+                },
             )
 
         @router.post("/api/auth/change-password", require_auth=True)
@@ -172,7 +181,6 @@ class AppContext:
             body = req.read_json_body()
             if body is None:
                 return
-            # Accept either { "config": {...} } or a raw config dict directly
             candidate = body.get("config", body) if isinstance(body, dict) else body
             try:
                 saved = self.config_store.save(candidate)
@@ -313,13 +321,16 @@ class AppContext:
             crop_rect = None
             if all(k in query for k in ("cropX", "cropY", "cropW", "cropH")):
                 try:
+                    raw_vals = [float(query[k][0]) for k in ("cropX", "cropY", "cropW", "cropH")]
+                    if not all(math.isfinite(v) for v in raw_vals):
+                        raise ValueError("Crop coordinates must be finite numbers.")
                     crop_rect = (
-                        int(round(float(query["cropX"][0]))),
-                        int(round(float(query["cropY"][0]))),
-                        int(round(float(query["cropW"][0]))),
-                        int(round(float(query["cropH"][0]))),
+                        int(round(raw_vals[0])),
+                        int(round(raw_vals[1])),
+                        int(round(raw_vals[2])),
+                        int(round(raw_vals[3])),
                     )
-                except ValueError:
+                except (ValueError, OverflowError):
                     req.send_json(
                         {"error": "Invalid crop parameters."},
                         status=HTTPStatus.BAD_REQUEST,
@@ -331,9 +342,13 @@ class AppContext:
             try:
                 if "startSec" in query and query["startSec"][0] != "":
                     start_sec = float(query["startSec"][0])
+                    if not math.isfinite(start_sec):
+                        raise ValueError("startSec must be finite")
                 if "endSec" in query and query["endSec"][0] != "":
                     end_sec = float(query["endSec"][0])
-            except ValueError:
+                    if not math.isfinite(end_sec):
+                        raise ValueError("endSec must be finite")
+            except (ValueError, OverflowError):
                 req.send_json(
                     {"error": "Invalid trim startSec/endSec parameters."},
                     status=HTTPStatus.BAD_REQUEST,
@@ -420,7 +435,12 @@ class AppContext:
 
         @router.post("/api/playback/stop", require_auth=True)
         def playback_stop(req: MatrixRequestHandler, _params: Dict[str, str]) -> None:
-            req.send_json(self.playback.stop())
+            try:
+                status = self.playback.stop()
+            except RuntimeError as exc:
+                req.send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            req.send_json(status)
 
         @router.post("/api/playback/next", require_auth=True)
         def playback_next(req: MatrixRequestHandler, _params: Dict[str, str]) -> None:
@@ -485,6 +505,22 @@ class MatrixRequestHandler(BaseHTTPRequestHandler):
         proto = self.headers.get("X-Forwarded-Proto", "")
         return proto.lower() == "https"
 
+    def _is_csrf_safe(self) -> bool:
+        """Verify same-origin Origin / Sec-Fetch-Site headers on mutating API calls."""
+        sec_fetch_site = (self.headers.get("Sec-Fetch-Site") or "").strip().lower()
+        if sec_fetch_site in ("cross-site", "same-site"):
+            return False
+
+        origin = (self.headers.get("Origin") or "").strip()
+        if origin:
+            host = (self.headers.get("Host") or "").strip().lower()
+            parsed = urlparse(origin)
+            origin_host = (parsed.netloc or "").lower()
+            if not host or origin_host != host:
+                return False
+
+        return True
+
     def _write_security_headers(self) -> None:
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "SAMEORIGIN")
@@ -497,7 +533,7 @@ class MatrixRequestHandler(BaseHTTPRequestHandler):
         status: HTTPStatus = HTTPStatus.OK,
         extra_headers: Optional[Dict[str, str]] = None,
     ) -> None:
-        encoded = json.dumps(payload).encode("utf-8")
+        encoded = json.dumps(payload, allow_nan=False).encode("utf-8")
         self.send_response(int(status))
         self._write_security_headers()
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -523,19 +559,28 @@ class MatrixRequestHandler(BaseHTTPRequestHandler):
         if range_header and range_header.startswith("bytes="):
             spec = range_header.replace("bytes=", "", 1).split(",", 1)[0].strip()
             parts = spec.split("-", 1)
+            if len(parts) != 2 or (not parts[0] and not parts[1]):
+                self.send_response(int(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE))
+                self.send_header("Content-Range", f"bytes */{file_size}")
+                self.end_headers()
+                return
             try:
                 if parts[0]:
                     start = int(parts[0])
-                if len(parts) > 1 and parts[1]:
+                if parts[1]:
                     end = int(parts[1])
-                if not parts[0] and len(parts) > 1 and parts[1]:
+                if not parts[0] and parts[1]:
                     suffix = int(parts[1])
+                    if suffix <= 0:
+                        raise ValueError("Invalid suffix range")
                     start = max(0, file_size - suffix)
                     end = file_size - 1
             except ValueError:
-                self.send_error(int(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE))
+                self.send_response(int(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE))
+                self.send_header("Content-Range", f"bytes */{file_size}")
+                self.end_headers()
                 return
-            if start < 0 or start >= file_size or end < start:
+            if file_size == 0 or start < 0 or start >= file_size or end < start:
                 self.send_response(int(HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE))
                 self.send_header("Content-Range", f"bytes */{file_size}")
                 self.end_headers()
@@ -543,7 +588,7 @@ class MatrixRequestHandler(BaseHTTPRequestHandler):
             end = min(end, file_size - 1)
             status = HTTPStatus.PARTIAL_CONTENT
 
-        length = end - start + 1
+        length = max(0, end - start + 1) if file_size > 0 else 0
         self.send_response(int(status))
         self._write_security_headers()
         self.send_header("Content-Type", content_type)
@@ -554,17 +599,28 @@ class MatrixRequestHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Range", f"bytes {start}-{end}/{file_size}")
         self.end_headers()
 
-        with file_path.open("rb") as fh:
-            fh.seek(start)
-            remaining = length
-            while remaining > 0:
-                chunk = fh.read(min(65536, remaining))
-                if not chunk:
-                    break
-                self.wfile.write(chunk)
-                remaining -= len(chunk)
+        try:
+            with file_path.open("rb") as fh:
+                fh.seek(start)
+                remaining = length
+                while remaining > 0:
+                    chunk = fh.read(min(65536, remaining))
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    remaining -= len(chunk)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def read_json_body(self) -> Optional[Dict[str, Any]]:
+        content_type = (self.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+        if content_type and content_type != "application/json":
+            self.send_json(
+                {"error": "Content-Type must be application/json."},
+                status=HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
+            )
+            return None
+
         raw_len = self.headers.get("Content-Length")
         if raw_len is None:
             self.send_json(
@@ -588,8 +644,11 @@ class MatrixRequestHandler(BaseHTTPRequestHandler):
             return None
         raw_body = self.rfile.read(length) if length > 0 else b"{}"
         try:
-            parsed = json.loads(raw_body.decode("utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError):
+            parsed = json.loads(
+                raw_body.decode("utf-8"),
+                parse_constant=_reject_json_constant,
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
             self.send_json(
                 {"error": "Request body must be valid JSON."},
                 status=HTTPStatus.BAD_REQUEST,
@@ -616,6 +675,12 @@ class MatrixRequestHandler(BaseHTTPRequestHandler):
                 )
                 return
             route, params = matched
+            if method in ("POST", "PUT", "DELETE") and not self._is_csrf_safe():
+                self.send_json(
+                    {"error": "Cross-origin request blocked."},
+                    status=HTTPStatus.FORBIDDEN,
+                )
+                return
             if route.require_auth:
                 session = self.ctx.auth.extract_session_from_cookie_header(
                     self.headers.get("Cookie")
@@ -628,11 +693,17 @@ class MatrixRequestHandler(BaseHTTPRequestHandler):
                     return
             try:
                 route.handler(self, params)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
             except Exception as exc:  # pragma: no cover - defensive fallback
-                self.send_json(
-                    {"error": f"Internal server error: {exc}"},
-                    status=HTTPStatus.INTERNAL_SERVER_ERROR,
-                )
+                print(f"[web-server] Unhandled error on {method} {path}: {exc}", file=sys.stderr)
+                try:
+                    self.send_json(
+                        {"error": "Internal server error."},
+                        status=HTTPStatus.INTERNAL_SERVER_ERROR,
+                    )
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
             return
 
         if method in ("GET", "HEAD"):
@@ -664,14 +735,12 @@ class MatrixRequestHandler(BaseHTTPRequestHandler):
             candidate = static_dir / "index.html"
         else:
             candidate = (static_dir / normalized).resolve()
-            # Prevent path traversal outside static_dir
             try:
                 candidate.relative_to(static_dir)
             except ValueError:
                 self.send_error(int(HTTPStatus.FORBIDDEN), "Forbidden")
                 return
             if not candidate.is_file():
-                # SPA fallback for client-side routes
                 candidate = static_dir / "index.html"
 
         if not candidate.is_file():
@@ -693,7 +762,10 @@ class MatrixRequestHandler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "public, max-age=31536000, immutable")
         self.end_headers()
         if not head_only:
-            self.wfile.write(data)
+            try:
+                self.wfile.write(data)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
 
     def do_GET(self) -> None:  # noqa: N802
         self._dispatch("GET")
@@ -721,6 +793,7 @@ def create_server(
     env_password: Optional[str] = None,
 ) -> ThreadingHTTPServer:
     httpd = ThreadingHTTPServer((host, port), MatrixRequestHandler)
+    httpd.daemon_threads = True
     httpd.app_ctx = AppContext(  # type: ignore[attr-defined]
         repo_root=repo_root,
         static_dir=static_dir,
@@ -757,6 +830,7 @@ def _run_with_reloader(raw_args: list[str]) -> None:
                     proc.wait(timeout=3)
                 except subprocess.TimeoutExpired:
                     proc.kill()
+                    proc.wait(timeout=1)
                 proc = subprocess.Popen(cmd)
             elif proc.poll() is not None:
                 break
@@ -769,6 +843,7 @@ def _run_with_reloader(raw_args: list[str]) -> None:
                 proc.wait(timeout=3)
             except subprocess.TimeoutExpired:
                 proc.kill()
+                proc.wait(timeout=1)
 
 
 def main() -> None:

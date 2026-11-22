@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/api/client';
 import type { PlaybackStatus } from '@/types/matrix';
 
@@ -26,19 +26,32 @@ const DEFAULT_STATUS: PlaybackStatus = {
 export function usePlayback({ enabled, onUnauthorized }: UsePlaybackOptions) {
   const [status, setStatus] = useState<PlaybackStatus>(DEFAULT_STATUS);
   const [busy, setBusy] = useState(false);
+  const followUpTimerRef = useRef<number | null>(null);
+  const enabledRef = useRef(enabled);
+  enabledRef.current = enabled;
+
+  const clearFollowUpTimer = useCallback(() => {
+    if (followUpTimerRef.current !== null) {
+      window.clearTimeout(followUpTimerRef.current);
+      followUpTimerRef.current = null;
+    }
+  }, []);
 
   const poll = useCallback(async () => {
-    if (!enabled) return;
+    if (!enabledRef.current) return;
     try {
       const next = await api.playback.status();
-      setStatus(next);
+      if (enabledRef.current) {
+        setStatus(next);
+      }
     } catch (err) {
       onUnauthorized?.(err);
     }
-  }, [enabled, onUnauthorized]);
+  }, [onUnauthorized]);
 
   useEffect(() => {
     if (!enabled) {
+      clearFollowUpTimer();
       setStatus(DEFAULT_STATUS);
       return;
     }
@@ -50,16 +63,25 @@ export function usePlayback({ enabled, onUnauthorized }: UsePlaybackOptions) {
       }
     }, 1500);
 
-    return () => window.clearInterval(timer);
-  }, [enabled, poll]);
+    return () => {
+      window.clearInterval(timer);
+      clearFollowUpTimer();
+    };
+  }, [enabled, poll, clearFollowUpTimer]);
 
   const runAction = useCallback(
     async (fn: () => Promise<PlaybackStatus>) => {
       setBusy(true);
       try {
         const next = await fn();
-        setStatus(next);
-        window.setTimeout(() => void poll(), 350);
+        if (enabledRef.current) {
+          setStatus(next);
+          clearFollowUpTimer();
+          followUpTimerRef.current = window.setTimeout(() => {
+            followUpTimerRef.current = null;
+            void poll();
+          }, 350);
+        }
         return next;
       } catch (err) {
         onUnauthorized?.(err);
@@ -68,7 +90,7 @@ export function usePlayback({ enabled, onUnauthorized }: UsePlaybackOptions) {
         setBusy(false);
       }
     },
-    [onUnauthorized, poll]
+    [onUnauthorized, poll, clearFollowUpTimer]
   );
 
   const start = useCallback(

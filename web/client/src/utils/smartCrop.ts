@@ -335,9 +335,52 @@ export function renderMatrixImage(
   );
 }
 
+let cachedMaskKey = '';
+let cachedMaskCanvas: HTMLCanvasElement | null = null;
+let scratchSrcCanvas: HTMLCanvasElement | null = null;
+
+function getDotMaskCanvas(
+  targetWidth: number,
+  targetHeight: number,
+  cell: number
+): HTMLCanvasElement {
+  const key = `${targetWidth}x${targetHeight}@${cell}`;
+  if (cachedMaskCanvas && cachedMaskKey === key) {
+    return cachedMaskCanvas;
+  }
+
+  // Create a single cell dot pattern and tile it across the full mask canvas
+  const tile = document.createElement('canvas');
+  tile.width = cell;
+  tile.height = cell;
+  const tileCtx = tile.getContext('2d');
+  if (tileCtx) {
+    tileCtx.fillStyle = '#ffffff';
+    tileCtx.beginPath();
+    tileCtx.arc(cell / 2, cell / 2, cell * 0.42, 0, Math.PI * 2);
+    tileCtx.fill();
+  }
+
+  const mask = document.createElement('canvas');
+  mask.width = targetWidth * cell;
+  mask.height = targetHeight * cell;
+  const mctx = mask.getContext('2d');
+  if (mctx) {
+    const pattern = mctx.createPattern(tile, 'repeat');
+    if (pattern) {
+      mctx.fillStyle = pattern;
+      mctx.fillRect(0, 0, mask.width, mask.height);
+    }
+  }
+
+  cachedMaskKey = key;
+  cachedMaskCanvas = mask;
+  return mask;
+}
+
 /**
- * Draws a matrix RGBA buffer onto a display preview canvas with optional round
- * LED dots matching the virtual matrix renderer.
+ * Draws a matrix RGBA buffer onto a display preview canvas using GPU-accelerated
+ * scaling and a cached dot-mask pattern (fast enough for 60 FPS video previews).
  */
 export function paintLedPreviewCanvas(
   canvas: HTMLCanvasElement,
@@ -355,31 +398,33 @@ export function paintLedPreviewCanvas(
   if (canvas.width !== nextW) canvas.width = nextW;
   if (canvas.height !== nextH) canvas.height = nextH;
 
+  if (!scratchSrcCanvas) {
+    scratchSrcCanvas = document.createElement('canvas');
+  }
+  if (scratchSrcCanvas.width !== targetWidth) scratchSrcCanvas.width = targetWidth;
+  if (scratchSrcCanvas.height !== targetHeight) scratchSrcCanvas.height = targetHeight;
+
+  const sctx = scratchSrcCanvas.getContext('2d');
   const ctx = canvas.getContext('2d');
-  if (!ctx) return;
+  if (!sctx || !ctx) return;
 
-  ctx.fillStyle = '#000000';
-  ctx.fillRect(0, 0, nextW, nextH);
+  const imgData = sctx.createImageData(targetWidth, targetHeight);
+  imgData.data.set(rgbaBytes);
+  sctx.putImageData(imgData, 0, 0);
 
-  const drawDots = ledDots && cell >= 3;
-  const radius = cell * 0.42;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.clearRect(0, 0, nextW, nextH);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(scratchSrcCanvas, 0, 0, nextW, nextH);
 
-  for (let y = 0; y < targetHeight; y++) {
-    for (let x = 0; x < targetWidth; x++) {
-      const idx = (y * targetWidth + x) * 4;
-      const r = rgbaBytes[idx];
-      const g = rgbaBytes[idx + 1];
-      const b = rgbaBytes[idx + 2];
-      if (r === 0 && g === 0 && b === 0) continue;
-      ctx.fillStyle = `rgb(${r},${g},${b})`;
-      if (drawDots) {
-        ctx.beginPath();
-        ctx.arc(x * cell + cell / 2, y * cell + cell / 2, radius, 0, Math.PI * 2);
-        ctx.fill();
-      } else {
-        ctx.fillRect(x * cell, y * cell, cell, cell);
-      }
-    }
+  if (ledDots && cell >= 3) {
+    const mask = getDotMaskCanvas(targetWidth, targetHeight, cell);
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.drawImage(mask, 0, 0);
+    ctx.globalCompositeOperation = 'destination-over';
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(0, 0, nextW, nextH);
+    ctx.globalCompositeOperation = 'source-over';
   }
 }
 

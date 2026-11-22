@@ -29,6 +29,8 @@ export interface PlaylistItemRowProps {
   item: PlaylistItem;
   meta?: EffectMeta;
   isPlaying?: boolean;
+  playDisabled?: boolean;
+  errorMessage?: string;
   isDragging?: boolean;
   isDragOver?: boolean;
   onDragStart: () => void;
@@ -50,6 +52,8 @@ export function PlaylistItemRow({
   item,
   meta,
   isPlaying = false,
+  playDisabled = false,
+  errorMessage,
   isDragging,
   isDragOver,
   onDragStart,
@@ -141,14 +145,18 @@ export function PlaylistItemRow({
             )}
           </p>
         )}
+        {errorMessage && (
+          <p className="mt-1 text-xs text-rose-400">{errorMessage}</p>
+        )}
       </div>
 
       <div className="flex shrink-0 items-center gap-1">
         <button
           type="button"
+          disabled={playDisabled}
           onClick={onPlayNow}
           title="Play this effect now on local matrix"
-          className={`rounded-lg p-1.5 transition-colors cursor-pointer ${
+          className={`rounded-lg p-1.5 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
             isPlaying
               ? 'bg-emerald-500/20 text-emerald-300'
               : 'text-emerald-400/80 hover:bg-emerald-500/15 hover:text-emerald-300'

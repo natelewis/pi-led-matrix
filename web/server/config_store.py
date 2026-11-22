@@ -3,16 +3,28 @@
 from __future__ import annotations
 
 import json
+import math
 import os
+import tempfile
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from .effects import discover_effects
 
 
 VALID_PINS = ("D10", "D12", "D18", "D21")
 VALID_COLOR_ORDERS = ("rgb", "rbg", "grb", "gbr", "brg", "bgr")
+
+
+def is_safe_relative_media_path(raw_file: Any) -> bool:
+    if not isinstance(raw_file, str):
+        return False
+    cleaned = raw_file.strip()
+    if not cleaned or cleaned.startswith("/") or "\\" in cleaned:
+        return False
+    return ".." not in Path(cleaned).parts
 
 
 class ConfigValidationError(ValueError):
@@ -24,12 +36,13 @@ class ConfigValidationError(ValueError):
 
 
 class ConfigStore:
-    """Reads and writes config.json with fallback to default_config.json."""
+    """Thread-safe reader/writer for config.json with fallback to default_config.json."""
 
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = repo_root
         self.config_path = repo_root / "config.json"
         self.default_config_path = repo_root / "default_config.json"
+        self._lock = threading.Lock()
 
     def _read_json(self, path: Path) -> Dict[str, Any]:
         with path.open("r", encoding="utf-8") as handle:
@@ -43,19 +56,21 @@ class ConfigStore:
 
     def load(self) -> Dict[str, Any]:
         """Return the active config along with metadata about its source."""
-        if self.config_path.exists():
-            config = self._read_json(self.config_path)
-            source = "custom"
-            stat = self.config_path.stat()
-            updated_at = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat()
-        else:
-            config = self.load_default_config()
-            source = "default"
-            updated_at = None
+        with self._lock:
+            if self.config_path.exists():
+                config = self._read_json(self.config_path)
+                source = "custom"
+                stat = self.config_path.stat()
+                updated_at = datetime.fromtimestamp(
+                    stat.st_mtime, tz=timezone.utc
+                ).isoformat()
+            else:
+                config = self.load_default_config()
+                source = "default"
+                updated_at = None
 
-        # Ensure optional virtual keys present in src/main.py defaults are always populated
-        defaults = self.load_default_config()
-        merged = {**defaults, **config}
+            defaults = self.load_default_config()
+            merged = {**defaults, **config}
 
         return {
             "config": merged,
@@ -71,8 +86,6 @@ class ConfigStore:
             raise ConfigValidationError({"_root": "Configuration must be a JSON object."})
 
         errors: Dict[str, str] = {}
-
-        # Preserve unknown keys while normalizing known fields
         normalized: Dict[str, Any] = dict(payload)
 
         def require_int(key: str, minimum: int, maximum: int) -> Optional[int]:
@@ -91,11 +104,15 @@ class ConfigStore:
             if isinstance(val, bool) or not isinstance(val, (int, float)):
                 errors[key] = f"{key} must be a number."
                 return None
-            if val < minimum or val > maximum:
+            fval = float(val)
+            if not math.isfinite(fval):
+                errors[key] = f"{key} must be a finite number."
+                return None
+            if fval < minimum or fval > maximum:
                 errors[key] = f"{key} must be between {minimum} and {maximum}."
                 return None
-            normalized[key] = round(float(val), 4)
-            return float(val)
+            normalized[key] = round(fval, 4)
+            return fval
 
         def require_bool(key: str) -> Optional[bool]:
             val = payload.get(key)
@@ -171,21 +188,46 @@ class ConfigStore:
                     elif not isinstance(cleaned_item["config"], dict):
                         errors[f"playlist.{idx}"] = "Effect config must be a JSON object."
                         continue
+                    elif effect_name in ("image", "video") and "file" in cleaned_item["config"]:
+                        if not is_safe_relative_media_path(cleaned_item["config"]["file"]):
+                            errors[f"playlist.{idx}"] = (
+                                "Media file path must be a relative path without '..'."
+                            )
+                            continue
                 cleaned_playlist.append(cleaned_item)
             normalized["playlist"] = cleaned_playlist
 
         if errors:
             raise ConfigValidationError(errors)
 
+        # Ensure entire object serializes as strict RFC 8259 JSON (no NaN/Infinity in nested keys)
+        try:
+            json.dumps(normalized, allow_nan=False)
+        except ValueError as exc:
+            raise ConfigValidationError(
+                {"_root": f"Configuration contains invalid non-finite numbers: {exc}"}
+            ) from exc
+
         return normalized
 
     def save(self, payload: Any) -> Dict[str, Any]:
         """Validate and atomically write config.json."""
         normalized = self.validate(payload)
-        tmp_path = self.config_path.with_suffix(".json.tmp")
-        serialized = json.dumps(normalized, indent=4) + "\n"
-        tmp_path.write_text(serialized, encoding="utf-8")
-        os.replace(tmp_path, self.config_path)
+        serialized = json.dumps(normalized, indent=4, allow_nan=False) + "\n"
+        with self._lock:
+            fd, tmp_name = tempfile.mkstemp(
+                dir=str(self.config_path.parent),
+                prefix=".config.json.",
+                suffix=".tmp",
+            )
+            tmp_path = Path(tmp_name)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                    handle.write(serialized)
+                os.replace(tmp_path, self.config_path)
+            except Exception:
+                tmp_path.unlink(missing_ok=True)
+                raise
         return self.load()
 
     def reset_to_defaults(self) -> Dict[str, Any]:

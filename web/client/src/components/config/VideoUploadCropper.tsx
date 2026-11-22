@@ -85,9 +85,12 @@ export function VideoUploadCropper({
   const [trimEnabled, setTrimEnabled] = useState(false);
   const [startSec, setStartSec] = useState(0);
   const [endSec, setEndSec] = useState(0);
+  const [previewUnavailable, setPreviewUnavailable] = useState(false);
   const [uploading, setUploading] = useState(false);
 
   const analyzedRef = useRef(false);
+  const analyzeTimerRef = useRef<number | null>(null);
+  const lastUiTimeUpdateRef = useRef(0);
   const dragStateRef = useRef<{
     startX: number;
     startY: number;
@@ -98,6 +101,9 @@ export function VideoUploadCropper({
   useEffect(() => {
     return () => {
       if (sourceUrl) URL.revokeObjectURL(sourceUrl);
+      if (analyzeTimerRef.current !== null) {
+        window.clearTimeout(analyzeTimerRef.current);
+      }
     };
   }, [sourceUrl]);
 
@@ -121,16 +127,17 @@ export function VideoUploadCropper({
     paintLedPreviewCanvas(preview, rgbaBytes, targetWidth, targetHeight, ledDots);
   }, [videoDims, targetWidth, targetHeight, fitMode, focalX, focalY, zoom, ledDots]);
 
-  // Continuously update LED preview while playing
+  // Continuously update LED preview while playing; throttle React scrubber updates (~6Hz)
   useEffect(() => {
     if (!isPlaying) {
       drawCurrentFrame();
       return;
     }
     let rafId = 0;
-    const tick = () => {
+    const tick = (ts: number) => {
       drawCurrentFrame();
-      if (videoRef.current) {
+      if (videoRef.current && ts - lastUiTimeUpdateRef.current >= 160) {
+        lastUiTimeUpdateRef.current = ts;
         setCurrentTime(videoRef.current.currentTime);
       }
       rafId = requestAnimationFrame(tick);
@@ -174,10 +181,7 @@ export function VideoUploadCropper({
 
       const nextUrl = URL.createObjectURL(file);
       analyzedRef.current = false;
-      setSourceUrl((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return nextUrl;
-      });
+      setSourceUrl(nextUrl);
       setSelectedFile(file);
       setFilename(file.name.replace(/\.[^.]+$/, ''));
       setVideoDims(null);
@@ -185,6 +189,7 @@ export function VideoUploadCropper({
       setCurrentTime(0);
       setIsPlaying(false);
       setAnalysis(null);
+      setPreviewUnavailable(false);
       setFitMode('crop');
       setFocalX(0.5);
       setFocalY(0.5);
@@ -206,13 +211,18 @@ export function VideoUploadCropper({
     setDuration(dur);
     setEndSec(Math.round(dur * 10) / 10);
 
-    // Seek slightly past 0s (if possible) to avoid black fade-in frames during smart-crop analysis
     const sampleTime = dur > 0.6 ? Math.min(dur * 0.2, 1.2) : 0;
     if (sampleTime > 0) {
       video.currentTime = sampleTime;
     } else if (!analyzedRef.current) {
       analyzedRef.current = true;
-      window.setTimeout(() => runSmartAnalysisOnVideo(), 50);
+      if (analyzeTimerRef.current !== null) {
+        window.clearTimeout(analyzeTimerRef.current);
+      }
+      analyzeTimerRef.current = window.setTimeout(() => {
+        analyzeTimerRef.current = null;
+        runSmartAnalysisOnVideo();
+      }, 50);
     }
   };
 
@@ -232,8 +242,10 @@ export function VideoUploadCropper({
     const video = videoRef.current;
     if (!video) return;
     if (video.paused) {
-      void video.play();
-      setIsPlaying(true);
+      video
+        .play()
+        .then(() => setIsPlaying(true))
+        .catch(() => setIsPlaying(false));
     } else {
       video.pause();
       setIsPlaying(false);
@@ -290,8 +302,14 @@ export function VideoUploadCropper({
     dragStateRef.current = null;
   };
 
+  const trimInvalid = trimEnabled && (startSec < 0 || endSec <= startSec);
+
   const handleUpload = async () => {
     if (!selectedFile) return;
+    if (trimInvalid) {
+      notify('error', 'Invalid trim range', 'End time must be greater than start time.');
+      return;
+    }
     setUploading(true);
     try {
       const ext = selectedFile.name.includes('.')
@@ -309,7 +327,7 @@ export function VideoUploadCropper({
         cropW: fitMode === 'crop' && cropRect ? cropRect.width : undefined,
         cropH: fitMode === 'crop' && cropRect ? cropRect.height : undefined,
         startSec: trimEnabled ? startSec : undefined,
-        endSec: trimEnabled && endSec > startSec ? endSec : undefined,
+        endSec: trimEnabled ? endSec : undefined,
       });
 
       notify(
@@ -330,11 +348,11 @@ export function VideoUploadCropper({
   };
 
   const clearSelection = () => {
-    if (sourceUrl) URL.revokeObjectURL(sourceUrl);
     setSourceUrl(null);
     setSelectedFile(null);
     setVideoDims(null);
     setAnalysis(null);
+    setPreviewUnavailable(false);
     setFilename('');
     setIsPlaying(false);
   };
@@ -396,9 +414,11 @@ export function VideoUploadCropper({
         <div className="flex items-center gap-2 text-cyan-100">
           <Sparkles className="h-4 w-4 shrink-0 text-cyan-300" />
           <span>
-            {analysis
-              ? analysis.summary
-              : 'Analyzing video frame for smart crop framing...'}
+            {previewUnavailable
+              ? 'Browser cannot preview this codec directly — ffmpeg will still transcode & center-crop it on upload.'
+              : analysis
+                ? analysis.summary
+                : 'Analyzing video frame for smart crop framing...'}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -535,6 +555,7 @@ export function VideoUploadCropper({
                 onSeeked={handleSeeked}
                 onLoadedData={drawCurrentFrame}
                 onEnded={() => setIsPlaying(false)}
+                onError={() => setPreviewUnavailable(true)}
                 className="block max-h-[220px] max-w-full object-contain"
               />
               {fitMode === 'crop' && cropPercent && (
@@ -668,27 +689,36 @@ export function VideoUploadCropper({
             )}
           </div>
           {trimEnabled && (
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              <Field label="Start (sec)">
-                <NumberInput
-                  min={0}
-                  max={Math.max(0, endSec - 0.2)}
-                  step={0.5}
-                  unit="s"
-                  value={startSec}
-                  onChange={(v) => setStartSec(Math.max(0, v))}
-                />
-              </Field>
-              <Field label="End (sec)">
-                <NumberInput
-                  min={startSec + 0.2}
-                  max={Math.ceil(duration * 10) / 10}
-                  step={0.5}
-                  unit="s"
-                  value={endSec}
-                  onChange={(v) => setEndSec(Math.min(duration, Math.max(startSec + 0.2, v)))}
-                />
-              </Field>
+            <div className="mt-3 space-y-2">
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Start (sec)">
+                  <NumberInput
+                    min={0}
+                    max={Math.ceil(duration * 10) / 10}
+                    step={0.5}
+                    unit="s"
+                    value={startSec}
+                    hasError={trimInvalid}
+                    onChange={(v) => setStartSec(Math.max(0, v))}
+                  />
+                </Field>
+                <Field label="End (sec)">
+                  <NumberInput
+                    min={0}
+                    max={Math.ceil(duration * 10) / 10}
+                    step={0.5}
+                    unit="s"
+                    value={endSec}
+                    hasError={trimInvalid}
+                    onChange={(v) => setEndSec(Math.min(duration, Math.max(0, v)))}
+                  />
+                </Field>
+              </div>
+              {trimInvalid && (
+                <p className="text-xs text-rose-400">
+                  End time must be greater than start time.
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -704,6 +734,7 @@ export function VideoUploadCropper({
           variant="primary"
           size="sm"
           loading={uploading}
+          disabled={trimInvalid}
           onClick={() => void handleUpload()}
           leftIcon={<Upload className="h-3.5 w-3.5" />}
         >

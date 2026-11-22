@@ -5,7 +5,6 @@ export interface SliderProps {
   min: number;
   max: number;
   step?: number;
-  formatValue?: (value: number) => string;
   marks?: string[];
   disabled?: boolean;
 }

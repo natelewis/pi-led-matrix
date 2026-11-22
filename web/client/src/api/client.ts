@@ -22,6 +22,16 @@ export class ApiError extends Error {
   }
 }
 
+function parseResponseJson(text: string): Record<string, unknown> {
+  if (!text) return {};
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
@@ -33,13 +43,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   const text = await response.text();
-  const data = text ? JSON.parse(text) : {};
+  const data = parseResponseJson(text);
 
   if (!response.ok) {
     throw new ApiError(
-      data.error || `Request failed (${response.status})`,
+      (typeof data.error === 'string' && data.error) ||
+        response.statusText ||
+        `Request failed (${response.status})`,
       response.status,
-      data.fields
+      data.fields as Record<string, string> | undefined
     );
   }
 
@@ -159,15 +171,17 @@ export const api = {
           body: file,
         });
         const text = await response.text();
-        const data = text ? JSON.parse(text) : {};
+        const data = parseResponseJson(text);
         if (!response.ok) {
           throw new ApiError(
-            data.error || `Upload failed (${response.status})`,
+            (typeof data.error === 'string' && data.error) ||
+              response.statusText ||
+              `Upload failed (${response.status})`,
             response.status,
-            data.fields
+            data.fields as Record<string, string> | undefined
           );
         }
-        return data as VideoUploadResponse;
+        return data as unknown as VideoUploadResponse;
       },
       deleteFile: (file: string) =>
         request<{ deleted: string; files: VideoFilesResponse['files'] }>(

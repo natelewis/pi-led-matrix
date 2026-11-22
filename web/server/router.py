@@ -32,7 +32,8 @@ class Router:
         *,
         require_auth: bool = True,
     ) -> None:
-        regex_str = re.sub(r":([a-zA-Z_][a-zA-Z0-9_]*)", r"(?P<\1>[^/]+)", path)
+        escaped = re.escape(path)
+        regex_str = re.sub(r"\\:([a-zA-Z_][a-zA-Z0-9_]*)", r"(?P<\1>[^/]+)", escaped)
         pattern = re.compile(f"^{regex_str}$")
         self._routes.append(
             Route(

@@ -24,6 +24,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 class WebServerTestCase(unittest.TestCase):
     def setUp(self) -> None:
+        self._prev_quiet = os.environ.get("LED_MATRIX_WEB_QUIET")
         os.environ["LED_MATRIX_WEB_QUIET"] = "1"
         self.tmpdir = Path(tempfile.mkdtemp(prefix="led_matrix_web_test_"))
         shutil.copy2(REPO_ROOT / "default_config.json", self.tmpdir / "default_config.json")
@@ -51,6 +52,10 @@ class WebServerTestCase(unittest.TestCase):
         self.server.shutdown()
         self.server.server_close()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
+        if self._prev_quiet is None:
+            os.environ.pop("LED_MATRIX_WEB_QUIET", None)
+        else:
+            os.environ["LED_MATRIX_WEB_QUIET"] = self._prev_quiet
 
     def _request(
         self,
@@ -405,6 +410,72 @@ class WebServerTestCase(unittest.TestCase):
         self.assertEqual(status, 200)
         cmd = json.loads((runtime_dir / "command.json").read_text(encoding="utf-8"))
         self.assertEqual(cmd["action"], "stop")
+
+    def test_security_csrf_nan_validation_and_rate_limit(self) -> None:
+        _, headers, _ = self._request(
+            "POST", "/api/auth/setup", {"password": "secret-password"}
+        )
+        self.assertIn("SameSite=Strict", headers.get("Set-Cookie", ""))
+        cookie = self._extract_cookie(headers)
+
+        # Cross-origin POST is rejected with 403
+        csrf_req = urllib.request.Request(
+            f"http://127.0.0.1:{self.port}/api/playback/next",
+            data=b"{}",
+            headers={
+                "Content-Type": "application/json",
+                "Cookie": cookie,
+                "Origin": "http://evil.example",
+            },
+            method="POST",
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(csrf_req)
+        self.assertEqual(ctx.exception.code, 403)
+
+        # Raw NaN JSON body is rejected (never written to config.json)
+        nan_req = urllib.request.Request(
+            f"http://127.0.0.1:{self.port}/api/config",
+            data=b'{"brightness": NaN}',
+            headers={"Content-Type": "application/json", "Cookie": cookie},
+            method="PUT",
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(nan_req)
+        self.assertEqual(ctx.exception.code, 400)
+
+        # Unknown effect name & path traversal in playback/play are rejected
+        status, _, _ = self._request(
+            "POST",
+            "/api/playback/play",
+            {"effect": "../../etc/passwd"},
+            cookie=cookie,
+        )
+        self.assertEqual(status, 400)
+
+        status, _, _ = self._request(
+            "POST",
+            "/api/playback/play",
+            {"effect": "image", "config": {"file": "../../../etc/passwd"}},
+            cookie=cookie,
+        )
+        self.assertEqual(status, 400)
+
+        # Media file traversal in config playlist is rejected with 422
+        _, _, cfg_resp = self._request("GET", "/api/config", cookie=cookie)
+        bad_cfg = dict(cfg_resp["config"])
+        bad_cfg["playlist"] = [{"effect": "video", "config": {"file": "../../secret.mp4"}}]
+        status, _, err = self._request("PUT", "/api/config", {"config": bad_cfg}, cookie=cookie)
+        self.assertEqual(status, 422)
+        self.assertIn("playlist.0", err["fields"])
+
+        # Login rate limiter returns 429 after exceeding max attempts
+        last_status = 0
+        for _ in range(13):
+            last_status, _, _ = self._request(
+                "POST", "/api/auth/login", {"password": "wrong-password"}
+            )
+        self.assertEqual(last_status, 429)
 
 
 if __name__ == "__main__":

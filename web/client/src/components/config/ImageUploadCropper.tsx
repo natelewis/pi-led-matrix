@@ -60,12 +60,21 @@ export function ImageUploadCropper({
   const [zoom, setZoom] = useState(1);
   const [uploading, setUploading] = useState(false);
 
+  const mountedRef = useRef(true);
+  const loadSeqRef = useRef(0);
   const dragStateRef = useRef<{
     startX: number;
     startY: number;
     startFocalX: number;
     startFocalY: number;
   } | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -80,32 +89,31 @@ export function ImageUploadCropper({
         return;
       }
 
+      const seq = ++loadSeqRef.current;
       const nextUrl = URL.createObjectURL(file);
       const img = new Image();
       img.onload = () => {
-        const result = analyzeSmartCrop(img, targetWidth, targetHeight);
-        setSourceUrl((prev) => {
-          if (prev) URL.revokeObjectURL(prev);
-          return nextUrl;
-        });
+        if (!mountedRef.current || seq !== loadSeqRef.current) {
+          URL.revokeObjectURL(nextUrl);
+          return;
+        }
+        setSourceUrl(nextUrl);
         setImageEl(img);
         setFilename(file.name.replace(/\.[^.]+$/, ''));
-        setAnalysis(result);
         setFitMode('crop');
-        setFocalX(result.focalX);
-        setFocalY(result.focalY);
-        setZoom(1);
       };
       img.onerror = () => {
         URL.revokeObjectURL(nextUrl);
-        notify('error', 'Could not read image', 'The selected image could not be decoded.');
+        if (mountedRef.current && seq === loadSeqRef.current) {
+          notify('error', 'Could not read image', 'The selected image could not be decoded.');
+        }
       };
       img.src = nextUrl;
     },
-    [notify, targetWidth, targetHeight]
+    [notify]
   );
 
-  // Re-run smart crop analysis if target matrix dimensions change while editing
+  // Run smart crop analysis once per loaded image or whenever target dimensions change
   useEffect(() => {
     if (!imageEl) return;
     const result = analyzeSmartCrop(imageEl, targetWidth, targetHeight);
@@ -211,7 +219,7 @@ export function ImageUploadCropper({
   };
 
   const clearSelection = () => {
-    if (sourceUrl) URL.revokeObjectURL(sourceUrl);
+    loadSeqRef.current += 1;
     setSourceUrl(null);
     setImageEl(null);
     setAnalysis(null);

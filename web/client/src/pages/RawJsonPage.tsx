@@ -26,6 +26,35 @@ interface RawJsonPageProps {
   onResetToDefaults: () => Promise<void>;
 }
 
+function validateDraftShape(value: unknown, fallback: MatrixConfig): MatrixConfig {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('Root value must be a JSON object.');
+  }
+  const obj = value as Record<string, unknown>;
+  const merged = { ...fallback, ...obj } as Record<string, unknown>;
+
+  if (!Array.isArray(merged.playlist)) {
+    throw new Error('"playlist" must be an array.');
+  }
+  if (!Array.isArray(merged.pixel_pins)) {
+    throw new Error('"pixel_pins" must be an array of GPIO pins.');
+  }
+  for (const numKey of [
+    'pixel_width',
+    'pixel_height',
+    'brightness',
+    'contrast',
+    'color',
+    'virtual_framerate',
+    'playlist_delay',
+  ]) {
+    if (typeof merged[numKey] !== 'number' || !Number.isFinite(merged[numKey])) {
+      throw new Error(`"${numKey}" must be a finite number.`);
+    }
+  }
+  return merged as MatrixConfig;
+}
+
 export function RawJsonPage({
   config,
   configPath,
@@ -48,12 +77,9 @@ export function RawJsonPage({
   const handleApply = () => {
     try {
       const parsed = JSON.parse(text);
-      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-        setParseError('Root value must be a JSON object.');
-        return;
-      }
+      const safe = validateDraftShape(parsed, config);
       setParseError(null);
-      onApplyDraft(parsed as MatrixConfig);
+      onApplyDraft(safe);
       notify('info', 'JSON applied to draft', 'Click Save Config in the top bar to write config.json.');
     } catch (err) {
       setParseError(err instanceof Error ? err.message : 'Invalid JSON');
@@ -78,7 +104,7 @@ export function RawJsonPage({
     a.href = url;
     a.download = 'config.json';
     a.click();
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -87,11 +113,17 @@ export function RawJsonPage({
     try {
       const content = await file.text();
       const parsed = JSON.parse(content);
-      setText(JSON.stringify(parsed, null, 4));
-      onApplyDraft(parsed as MatrixConfig);
+      const safe = validateDraftShape(parsed, config);
+      setText(JSON.stringify(safe, null, 4));
+      setParseError(null);
+      onApplyDraft(safe);
       notify('info', `Imported ${file.name}`, 'Review and click Save Config to persist.');
-    } catch {
-      notify('error', 'Import failed', 'Selected file is not valid JSON.');
+    } catch (err) {
+      notify(
+        'error',
+        'Import failed',
+        err instanceof Error ? err.message : 'Selected file is not valid config JSON.'
+      );
     } finally {
       e.target.value = '';
     }

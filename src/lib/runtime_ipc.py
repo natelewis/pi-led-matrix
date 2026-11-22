@@ -5,6 +5,7 @@ Files live inside `<repo_root>/_runtime/`, which is automatically gitignored via
 
 import json
 import os
+import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -22,9 +23,20 @@ def get_runtime_dir(repo_root=None):
 
 def _atomic_write_json(path, payload):
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_suffix(".json.tmp")
-    tmp_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    os.replace(tmp_path, path)
+    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, allow_nan=False)
+            handle.write("\n")
+        try:
+            os.chmod(tmp_path, 0o664)
+        except OSError:
+            pass
+        os.replace(tmp_path, path)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
 
 
 def _read_json(path):

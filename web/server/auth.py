@@ -8,8 +8,8 @@ import hmac
 import json
 import os
 import secrets
+import threading
 import time
-from collections import defaultdict
 from http.cookies import SimpleCookie
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -21,6 +21,7 @@ PBKDF2_ITERATIONS = 310_000
 MIN_PASSWORD_LENGTH = 4
 RATE_LIMIT_WINDOW_SECONDS = 300
 RATE_LIMIT_MAX_ATTEMPTS = 12
+MAX_TRACKED_IPS = 1024
 
 
 def _hash_password(password: str, salt: bytes) -> str:
@@ -43,7 +44,7 @@ def _b64url_decode(data: str) -> bytes:
 
 
 class AuthManager:
-    """Manages admin credentials, signed HttpOnly session cookies, and rate limiting."""
+    """Thread-safe admin credential, signed HttpOnly cookie, and rate-limit manager."""
 
     def __init__(
         self,
@@ -53,9 +54,12 @@ class AuthManager:
         session_ttl: int = SESSION_TTL_SECONDS,
     ) -> None:
         self.auth_file = auth_file
-        self.env_password = env_password if env_password is not None else os.environ.get("LED_MATRIX_PASSWORD")
+        self.env_password = (
+            env_password if env_password is not None else os.environ.get("LED_MATRIX_PASSWORD")
+        )
         self.session_ttl = session_ttl
-        self._failed_attempts: Dict[str, List[float]] = defaultdict(list)
+        self._lock = threading.Lock()
+        self._failed_attempts: Dict[str, List[float]] = {}
         self._state = self._load_or_init_state()
 
     def _load_or_init_state(self) -> Dict[str, str]:
@@ -72,15 +76,25 @@ class AuthManager:
             "password_hash": "",
         }
 
-    def _persist_state(self) -> None:
+    def _persist_state_locked(self) -> None:
+        """Atomically persist auth state with 0600 permissions from creation (no TOCTOU)."""
         self.auth_file.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = self.auth_file.with_suffix(".json.tmp")
-        tmp_path.write_text(json.dumps(self._state, indent=2) + "\n", encoding="utf-8")
+        payload = json.dumps(self._state, indent=2, allow_nan=False) + "\n"
+        tmp_path = self.auth_file.with_name(
+            f".{self.auth_file.name}.{secrets.token_hex(6)}.tmp"
+        )
+        fd = os.open(
+            str(tmp_path),
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            0o600,
+        )
         try:
-            os.chmod(tmp_path, 0o600)
-        except OSError:
-            pass
-        os.replace(tmp_path, self.auth_file)
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(payload)
+            os.replace(tmp_path, self.auth_file)
+        except Exception:
+            tmp_path.unlink(missing_ok=True)
+            raise
 
     @property
     def is_env_managed(self) -> bool:
@@ -88,87 +102,135 @@ class AuthManager:
 
     @property
     def is_initialized(self) -> bool:
+        with self._lock:
+            return self._is_initialized_locked()
+
+    def _is_initialized_locked(self) -> bool:
         return self.is_env_managed or bool(
             self._state.get("password_hash") and self._state.get("password_salt")
         )
 
-    def _verify_password(self, password: str) -> bool:
+    def _verify_password_snapshot(
+        self, password: str, salt_b64: str, expected_hash: str
+    ) -> bool:
         if self.is_env_managed and self.env_password is not None:
-            return hmac.compare_digest(password.encode("utf-8"), self.env_password.encode("utf-8"))
-        if not self.is_initialized:
+            return hmac.compare_digest(
+                password.encode("utf-8"), self.env_password.encode("utf-8")
+            )
+        if not salt_b64 or not expected_hash:
             return False
-        salt = base64.b64decode(self._state["password_salt"])
+        salt = base64.b64decode(salt_b64)
         candidate = _hash_password(password, salt)
-        return hmac.compare_digest(candidate, self._state["password_hash"])
+        return hmac.compare_digest(candidate, expected_hash)
+
+    def _prune_attempts_locked(self, client_ip: str, now: float) -> List[float]:
+        attempts = [
+            ts
+            for ts in self._failed_attempts.get(client_ip, [])
+            if now - ts < RATE_LIMIT_WINDOW_SECONDS
+        ]
+        if attempts:
+            self._failed_attempts[client_ip] = attempts
+        else:
+            self._failed_attempts.pop(client_ip, None)
+        return attempts
+
+    def _evict_if_oversized_locked(self, now: float) -> None:
+        if len(self._failed_attempts) <= MAX_TRACKED_IPS:
+            return
+        stale_ips = [
+            ip
+            for ip, stamps in self._failed_attempts.items()
+            if not any(now - ts < RATE_LIMIT_WINDOW_SECONDS for ts in stamps)
+        ]
+        for ip in stale_ips:
+            self._failed_attempts.pop(ip, None)
+        while len(self._failed_attempts) > MAX_TRACKED_IPS:
+            oldest_ip = next(iter(self._failed_attempts))
+            self._failed_attempts.pop(oldest_ip, None)
 
     def is_rate_limited(self, client_ip: str) -> bool:
-        now = time.time()
-        attempts = [
-            ts for ts in self._failed_attempts[client_ip] if now - ts < RATE_LIMIT_WINDOW_SECONDS
-        ]
-        self._failed_attempts[client_ip] = attempts
-        return len(attempts) >= RATE_LIMIT_MAX_ATTEMPTS
-
-    def _record_failure(self, client_ip: str) -> None:
-        self._failed_attempts[client_ip].append(time.time())
-
-    def _clear_failures(self, client_ip: str) -> None:
-        self._failed_attempts.pop(client_ip, None)
+        with self._lock:
+            return len(self._prune_attempts_locked(client_ip, time.time())) >= RATE_LIMIT_MAX_ATTEMPTS
 
     def setup_password(self, password: str) -> Tuple[bool, Optional[str]]:
-        if self.is_initialized:
-            return False, "Password is already configured."
         if len(password) < MIN_PASSWORD_LENGTH:
             return False, f"Password must be at least {MIN_PASSWORD_LENGTH} characters."
         salt = secrets.token_bytes(16)
-        self._state["password_salt"] = base64.b64encode(salt).decode("ascii")
-        self._state["password_hash"] = _hash_password(password, salt)
-        if not self._state.get("session_secret"):
-            self._state["session_secret"] = secrets.token_hex(32)
-        self._persist_state()
-        return True, None
+        derived = _hash_password(password, salt)
+        with self._lock:
+            if self._is_initialized_locked():
+                return False, "Password is already configured."
+            self._state["password_salt"] = base64.b64encode(salt).decode("ascii")
+            self._state["password_hash"] = derived
+            if not self._state.get("session_secret"):
+                self._state["session_secret"] = secrets.token_hex(32)
+            self._persist_state_locked()
+            return True, None
 
     def change_password(
         self, current_password: str, new_password: str
     ) -> Tuple[bool, Optional[str]]:
         if self.is_env_managed:
             return False, "Password is managed via the LED_MATRIX_PASSWORD environment variable."
-        if not self.is_initialized:
-            return False, "Password has not been set up yet."
-        if not self._verify_password(current_password):
-            return False, "Current password is incorrect."
         if len(new_password) < MIN_PASSWORD_LENGTH:
             return False, f"New password must be at least {MIN_PASSWORD_LENGTH} characters."
 
-        salt = secrets.token_bytes(16)
-        self._state["password_salt"] = base64.b64encode(salt).decode("ascii")
-        self._state["password_hash"] = _hash_password(new_password, salt)
-        # Rotate session secret to invalidate older sessions elsewhere
-        self._state["session_secret"] = secrets.token_hex(32)
-        self._persist_state()
+        with self._lock:
+            if not self._is_initialized_locked():
+                return False, "Password has not been set up yet."
+            salt_b64 = self._state["password_salt"]
+            expected_hash = self._state["password_hash"]
+
+        if not self._verify_password_snapshot(current_password, salt_b64, expected_hash):
+            return False, "Current password is incorrect."
+
+        new_salt = secrets.token_bytes(16)
+        new_hash = _hash_password(new_password, new_salt)
+        with self._lock:
+            self._state["password_salt"] = base64.b64encode(new_salt).decode("ascii")
+            self._state["password_hash"] = new_hash
+            # Rotate session secret to invalidate older sessions elsewhere
+            self._state["session_secret"] = secrets.token_hex(32)
+            self._persist_state_locked()
         return True, None
 
     def authenticate(self, password: str, client_ip: str) -> Tuple[bool, Optional[str]]:
-        if not self.is_initialized:
-            return False, "Password has not been set up yet."
-        if self.is_rate_limited(client_ip):
-            return False, "Too many failed login attempts. Please wait a few minutes."
-        if not self._verify_password(password):
-            self._record_failure(client_ip)
+        now = time.time()
+        with self._lock:
+            if not self._is_initialized_locked():
+                return False, "Password has not been set up yet."
+            attempts = self._prune_attempts_locked(client_ip, now)
+            if len(attempts) >= RATE_LIMIT_MAX_ATTEMPTS:
+                return False, "Too many failed login attempts. Please wait a few minutes."
+            # Reserve attempt slot before releasing lock for PBKDF2 so concurrent bursts can't bypass limit
+            self._evict_if_oversized_locked(now)
+            self._failed_attempts.setdefault(client_ip, []).append(now)
+            salt_b64 = self._state.get("password_salt", "")
+            expected_hash = self._state.get("password_hash", "")
+
+        ok = self._verify_password_snapshot(password, salt_b64, expected_hash)
+        if not ok:
             return False, "Invalid password."
-        self._clear_failures(client_ip)
+
+        with self._lock:
+            self._failed_attempts.pop(client_ip, None)
         return True, None
 
     def create_session_token(self) -> str:
+        with self._lock:
+            secret = self._state["session_secret"]
         payload = {
             "sub": "admin",
             "iat": int(time.time()),
             "exp": int(time.time()) + self.session_ttl,
             "nonce": secrets.token_hex(8),
         }
-        payload_b64 = _b64url_encode(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+        payload_b64 = _b64url_encode(
+            json.dumps(payload, separators=(",", ":"), allow_nan=False).encode("utf-8")
+        )
         signature = hmac.new(
-            self._state["session_secret"].encode("utf-8"),
+            secret.encode("utf-8"),
             payload_b64.encode("ascii"),
             hashlib.sha256,
         ).digest()
@@ -177,10 +239,12 @@ class AuthManager:
     def verify_session_token(self, token: Optional[str]) -> Optional[Dict[str, object]]:
         if not token or "." not in token:
             return None
+        with self._lock:
+            secret = self._state["session_secret"]
         try:
             payload_b64, sig_b64 = token.split(".", 1)
             expected_sig = hmac.new(
-                self._state["session_secret"].encode("utf-8"),
+                secret.encode("utf-8"),
                 payload_b64.encode("ascii"),
                 hashlib.sha256,
             ).digest()
@@ -217,12 +281,21 @@ class AuthManager:
             f"{SESSION_COOKIE_NAME}={token}",
             "Path=/",
             "HttpOnly",
-            "SameSite=Lax",
+            "SameSite=Strict",
             f"Max-Age={self.session_ttl}",
         ]
         if secure:
             parts.append("Secure")
         return "; ".join(parts)
 
-    def build_clear_cookie_header(self) -> str:
-        return f"{SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
+    def build_clear_cookie_header(self, *, secure: bool = False) -> str:
+        parts = [
+            f"{SESSION_COOKIE_NAME}=",
+            "Path=/",
+            "HttpOnly",
+            "SameSite=Strict",
+            "Max-Age=0",
+        ]
+        if secure:
+            parts.append("Secure")
+        return "; ".join(parts)

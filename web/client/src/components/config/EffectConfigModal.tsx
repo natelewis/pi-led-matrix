@@ -236,7 +236,7 @@ export function EffectConfigModal({
         setJsonError('Add at least one marquee message.');
         return;
       }
-      onSave({ messages: filtered });
+      onSave({ ...(item.config ?? {}), messages: filtered });
       onClose();
       return;
     }
@@ -247,7 +247,7 @@ export function EffectConfigModal({
         setJsonError(`Enter a ${schema} filename.`);
         return;
       }
-      onSave({ file: trimmed });
+      onSave({ ...(item.config ?? {}), file: trimmed });
       onClose();
     }
   };
@@ -273,11 +273,40 @@ export function EffectConfigModal({
               onClick={() => {
                 if (!useRawMode) {
                   const previewObj =
-                    schema === 'marquee' ? { messages } : { file: fileName };
+                    schema === 'marquee'
+                      ? { ...(item.config ?? {}), messages }
+                      : { ...(item.config ?? {}), file: fileName };
                   setRawJson(JSON.stringify(previewObj, null, 2));
+                  setUseRawMode(true);
+                  setJsonError(null);
+                } else {
+                  try {
+                    const parsed = JSON.parse(rawJson.trim() || '{}');
+                    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+                      setJsonError('Fix invalid JSON object before switching back to Form Editor.');
+                      return;
+                    }
+                    if (schema === 'marquee' && Array.isArray(parsed.messages)) {
+                      setMessages(
+                        parsed.messages.map((m: Record<string, unknown>) => ({
+                          left: Number(m.left ?? 0),
+                          right: Number(m.right ?? 5),
+                          r: Number(m.r ?? 255),
+                          g: Number(m.g ?? 255),
+                          b: Number(m.b ?? 255),
+                          message: String(m.message ?? ''),
+                          font: String(m.font ?? defaultFont),
+                        }))
+                      );
+                    } else if ((schema === 'image' || schema === 'video') && typeof parsed.file === 'string') {
+                      setFileName(parsed.file);
+                    }
+                    setUseRawMode(false);
+                    setJsonError(null);
+                  } catch {
+                    setJsonError('Fix invalid JSON syntax before switching back to Form Editor.');
+                  }
                 }
-                setUseRawMode((v) => !v);
-                setJsonError(null);
               }}
             >
               {useRawMode ? 'Switch to Form Editor' : 'Edit Raw JSON'}
@@ -337,7 +366,14 @@ export function EffectConfigModal({
                     {fonts.length > 0 ? (
                       <Select
                         value={msg.font}
-                        options={fonts.map((f) => ({ value: f, label: f }))}
+                        options={
+                          msg.font && !fonts.includes(msg.font)
+                            ? [
+                                { value: msg.font, label: `${msg.font} (missing)` },
+                                ...fonts.map((f) => ({ value: f, label: f })),
+                              ]
+                            : fonts.map((f) => ({ value: f, label: f }))
+                        }
                         onChange={(e) =>
                           setMessages((prev) =>
                             prev.map((m, i) =>

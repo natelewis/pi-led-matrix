@@ -84,18 +84,30 @@ def discover_effect_media(
     if include_uploads:
         uploads_dir = effect_dir / "_uploads"
         if uploads_dir.is_dir():
-            found.extend(
-                f"_uploads/{p.name}"
-                for p in sorted(uploads_dir.iterdir(), key=lambda item: item.stat().st_mtime, reverse=True)
-                if p.is_file() and p.suffix.lower() in extensions
-            )
-    found.extend(
-        sorted(
-            p.name
-            for p in effect_dir.iterdir()
-            if p.is_file() and p.suffix.lower() in extensions
-        )
-    )
+            upload_entries: List[tuple[float, str]] = []
+            for p in uploads_dir.iterdir():
+                if p.suffix.lower() not in extensions:
+                    continue
+                try:
+                    if not p.is_file():
+                        continue
+                    mtime = p.stat().st_mtime
+                except OSError:
+                    continue
+                upload_entries.append((mtime, f"_uploads/{p.name}"))
+            upload_entries.sort(key=lambda item: item[0], reverse=True)
+            found.extend(name for _, name in upload_entries)
+
+    root_entries: List[str] = []
+    for p in effect_dir.iterdir():
+        if p.suffix.lower() not in extensions:
+            continue
+        try:
+            if p.is_file():
+                root_entries.append(p.name)
+        except OSError:
+            continue
+    found.extend(sorted(root_entries))
     return found
 
 

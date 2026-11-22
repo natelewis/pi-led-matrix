@@ -1,11 +1,24 @@
-import sys
 import time
-from os.path import exists
+from pathlib import Path
 
 from PIL import Image
 
 
 USAGE = 'Usage: make run effect=image config=\'{"file": "image-name.png"}\''
+
+
+def _resolve_safe_image_path(effect_dir, raw_file):
+    if not isinstance(raw_file, str) or not raw_file.strip():
+        raise ValueError("Missing image file in effect config.")
+    base_dir = Path(effect_dir).resolve()
+    candidate = (base_dir / raw_file.strip()).resolve()
+    try:
+        candidate.relative_to(base_dir)
+    except ValueError as exc:
+        raise ValueError("Image path must reside inside the image effect directory.") from exc
+    if not candidate.is_file():
+        raise FileNotFoundError(f"Image file not found: {raw_file}")
+    return candidate
 
 
 def _load_rgb_image(image_file):
@@ -20,18 +33,18 @@ def run(matrix, config):
     """show an image for the configured playlist duration"""
     effect_dir = config["effect_dir"]
     effect_cfg = config.get("effect") or {}
-    if not isinstance(effect_cfg, dict) or not effect_cfg.get("file"):
-        print("Error: missing image file in effect config")
+    if not isinstance(effect_cfg, dict):
+        print("Error: invalid image effect config")
         print(USAGE)
-        sys.exit(1)
+        raise ValueError("Invalid image effect config")
 
-    image_file = effect_dir + "/" + effect_cfg["file"]
-    if not exists(image_file):
-        print("Error: file not found")
-        print(USAGE)
-        sys.exit(1)
+    image_path = _resolve_safe_image_path(effect_dir, effect_cfg.get("file"))
 
-    image = _load_rgb_image(image_file)
+    image = _load_rgb_image(image_path)
+    target_size = (config["pixel_width"], config["pixel_height"])
+    if image.size != target_size:
+        image = image.resize(target_size, Image.LANCZOS)
+
     r, g, b = image.split()
     color_corrected_image = Image.merge(
         "RGB", matrix.swap_colors((r, g, b), config["color_order"])

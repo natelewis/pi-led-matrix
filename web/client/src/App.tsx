@@ -3,7 +3,7 @@ import { Loader2, RefreshCw } from 'lucide-react';
 import { LivePlaybackBar } from '@/components/config/LivePlaybackBar';
 import { AppShell } from '@/components/layout/AppShell';
 import { NAV_ITEMS } from '@/components/layout/navItems';
-import { Button, ToastProvider, useToast } from '@/components/ui';
+import { Button, ErrorBoundary, ToastProvider, useToast } from '@/components/ui';
 import { useAuth } from '@/hooks/useAuth';
 import { useMatrixConfig } from '@/hooks/useMatrixConfig';
 import { usePlayback } from '@/hooks/usePlayback';
@@ -48,6 +48,7 @@ function MatrixStudioApp() {
     if (!matrix.isDirty) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
+      e.returnValue = '';
     };
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
@@ -226,6 +227,7 @@ function MatrixStudioApp() {
               ? playback.status.currentIndex
               : null
           }
+          playbackBusy={playback.busy}
           isDirty={matrix.isDirty}
           onPlayPlaylistItem={(idx, item) => void handlePlayPlaylistItem(idx, item)}
           onUpdateConfig={matrix.updateDraft}
@@ -273,9 +275,11 @@ function MatrixStudioApp() {
 
 export function App() {
   return (
-    <ToastProvider>
-      <MatrixStudioApp />
-    </ToastProvider>
+    <ErrorBoundary>
+      <ToastProvider>
+        <MatrixStudioApp />
+      </ToastProvider>
+    </ErrorBoundary>
   );
 }
 

@@ -3,24 +3,34 @@ import inspect
 import multiprocessing
 import os
 import random
+import re
 import signal
-import sys
 import time
+from pathlib import Path
 
 import main
 from lib import runtime_ipc
 
 
+EFFECT_NAME_RE = re.compile(r"^[a-zA-Z0-9_]+$")
+
+
 def import_effect(name):
-    effect_dir = os.path.realpath(
-        os.path.abspath(
-            os.path.join(
-                os.path.split(inspect.getfile(inspect.currentframe()))[0],
-                "effects/" + name,
-            )
-        )
-    )
-    return importlib.import_module("effects." + name + ".effect"), effect_dir
+    if not isinstance(name, str) or not EFFECT_NAME_RE.match(name):
+        raise ValueError(f"Invalid effect name: {name!r}")
+
+    src_dir = Path(inspect.getfile(inspect.currentframe())).resolve().parent
+    effects_root = (src_dir / "effects").resolve()
+    effect_path = (effects_root / name).resolve()
+    try:
+        effect_path.relative_to(effects_root)
+    except ValueError as exc:
+        raise ValueError(f"Invalid effect path: {name!r}") from exc
+
+    if not (effect_path / "effect.py").is_file():
+        raise FileNotFoundError(f"Unknown effect: {name}")
+
+    return importlib.import_module("effects." + name + ".effect"), str(effect_path)
 
 
 def build_effects(playlist_entries):
@@ -113,17 +123,20 @@ def main_loop():
     current_index = None
     current_effect_name = None
     current_effect_config = {}
+    current_mode = "playlist"
     effect_started_at = time.time()
     last_heartbeat = 0.0
 
-    def publish_state(status="playing", mode="playlist"):
-        nonlocal last_heartbeat
+    def publish_state(status="playing", mode=None):
+        nonlocal last_heartbeat, current_mode
+        if mode is not None:
+            current_mode = mode
         last_heartbeat = time.time()
         runtime_ipc.write_state(
             {
                 "pid": os.getpid(),
                 "status": status,
-                "mode": mode,
+                "mode": current_mode,
                 "currentIndex": current_index,
                 "currentEffect": current_effect_name,
                 "currentConfig": current_effect_config,
@@ -135,9 +148,40 @@ def main_loop():
             }
         )
 
+    def _apply_hot_reload(shared_matrix=None):
+        """Reload config.json live; return True only if the current effect must restart."""
+        nonlocal effects, last_config_mtime, pending_cmd
+        last_config_mtime = runtime_ipc.get_active_config_mtime()
+        try:
+            info = main.reload_config()
+            effects = build_effects(main.playlist)
+            if shared_matrix is not None:
+                shared_matrix.apply_runtime_config(dims_changed=info["dims_changed"])
+            publish_state("playing")
+
+            if info["dims_changed"]:
+                # Restart current entry at new geometry if possible
+                if current_index is not None and 0 <= current_index < len(effects):
+                    pending_cmd = {"action": "jump", "index": current_index}
+                return True
+
+            if current_mode == "playlist" and current_index is not None:
+                if current_index >= len(effects):
+                    return True
+                updated_entry = effects[current_index]
+                if (
+                    updated_entry["name"] != current_effect_name
+                    or updated_entry["effect"] != current_effect_config
+                ):
+                    pending_cmd = {"action": "jump", "index": current_index}
+                    return True
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            print(f"Warning: failed to hot-reload config.json: {exc}", flush=True)
+        return False
+
     def poll_control(shared_matrix=None):
         """Return True if the currently running effect should yield immediately."""
-        nonlocal stop_requested, pending_cmd, last_cmd_id, last_config_mtime, effects
+        nonlocal stop_requested, pending_cmd, last_cmd_id
 
         if stop_requested:
             return True
@@ -154,56 +198,28 @@ def main_loop():
             if action == "stop":
                 stop_requested = True
                 return True
-            if action in ("next", "jump", "play_effect", "reload"):
+            if action == "reload":
+                return _apply_hot_reload(shared_matrix)
+            if action in ("next", "jump", "play_effect"):
                 pending_cmd = cmd
                 return True
 
         # 2. Check live config.json edits for seamless hot-reload
         current_mtime = runtime_ipc.get_active_config_mtime()
         if current_mtime != last_config_mtime:
-            last_config_mtime = current_mtime
-            try:
-                prev_playlist = list(main.playlist)
-                info = main.reload_config()
-                effects = build_effects(main.playlist)
-                if shared_matrix is not None:
-                    shared_matrix.apply_runtime_config(dims_changed=info["dims_changed"])
-                publish_state("playing")
-                # Interrupt immediately if geometry changed or current entry disappeared
-                if info["dims_changed"]:
-                    return True
-                if current_index is not None and (
-                    current_index >= len(effects)
-                    or (
-                        prev_playlist != main.playlist
-                        and effects[current_index]["name"] != current_effect_name
-                    )
-                ):
-                    return True
-            except Exception as exc:
-                print(f"Warning: failed to hot-reload config.json: {exc}", flush=True)
+            return _apply_hot_reload(shared_matrix)
 
         return False
 
     def choose_next_effect():
         nonlocal pending_cmd, current_index, current_effect_name, current_effect_config
-        nonlocal effects, last_config_mtime
 
         cmd = pending_cmd
         pending_cmd = None
 
         if cmd:
             action = cmd.get("action")
-            if action == "reload":
-                try:
-                    info = main.reload_config()
-                    last_config_mtime = runtime_ipc.get_active_config_mtime()
-                    effects = build_effects(main.playlist)
-                    if shared_matrix is not None:
-                        shared_matrix.apply_runtime_config(dims_changed=info["dims_changed"])
-                except Exception as exc:
-                    print(f"Warning: reload failed: {exc}", flush=True)
-            elif action == "play_effect":
+            if action == "play_effect":
                 fx_name = cmd.get("effect")
                 fx_cfg = cmd.get("config") or {}
                 if isinstance(fx_name, str) and fx_name:
@@ -213,7 +229,11 @@ def main_loop():
                     return build_single_effect(fx_name, current_effect_config), "single"
             elif action == "jump":
                 target_idx = cmd.get("index")
-                if isinstance(target_idx, int) and 0 <= target_idx < len(effects):
+                if (
+                    not isinstance(target_idx, bool)
+                    and isinstance(target_idx, int)
+                    and 0 <= target_idx < len(effects)
+                ):
                     current_index = target_idx
                     chosen = effects[target_idx]
                     current_effect_name = chosen["name"]
@@ -239,7 +259,13 @@ def main_loop():
         shared_matrix.set_interrupt_check(lambda: poll_control(shared_matrix))
         try:
             while not stop_requested:
-                effect_obj, mode = choose_next_effect()
+                try:
+                    effect_obj, mode = choose_next_effect()
+                except Exception as exc:  # pylint: disable=broad-exception-caught
+                    print(f"Error selecting next effect: {exc}", flush=True)
+                    time.sleep(0.5)
+                    continue
+
                 if effect_obj is None:
                     publish_state("idle", "idle")
                     time.sleep(0.25)
@@ -249,11 +275,20 @@ def main_loop():
                 publish_state("playing", mode)
                 try:
                     _run_effect_obj(effect_obj, shared_matrix)
-                except SystemExit:
-                    stop_requested = True
-                    break
-                except Exception as exc:
-                    print(f"Error running effect {effect_obj['name']}: {exc}", flush=True)
+                except SystemExit as exc:
+                    if exc.code in (None, 0):
+                        stop_requested = True
+                        break
+                    print(
+                        f"Effect {effect_obj['name']} exited with error code {exc.code}",
+                        flush=True,
+                    )
+                    time.sleep(0.5)
+                except Exception as exc:  # pylint: disable=broad-exception-caught
+                    print(
+                        f"Error running effect {effect_obj['name']}: {exc}",
+                        flush=True,
+                    )
                     time.sleep(0.5)
         except KeyboardInterrupt:
             pass
@@ -262,9 +297,16 @@ def main_loop():
             shared_matrix.close()
     else:
         multiprocessing.set_start_method("spawn", force=True)
+        active_proc = None
         try:
             while not stop_requested:
-                effect_obj, mode = choose_next_effect()
+                try:
+                    effect_obj, mode = choose_next_effect()
+                except Exception as exc:  # pylint: disable=broad-exception-caught
+                    print(f"Error selecting next effect: {exc}", flush=True)
+                    time.sleep(0.5)
+                    continue
+
                 if effect_obj is None:
                     publish_state("idle", "idle")
                     time.sleep(0.25)
@@ -272,23 +314,31 @@ def main_loop():
                     continue
                 effect_started_at = time.time()
                 publish_state("playing", mode)
-                proc = multiprocessing.Process(
+                active_proc = multiprocessing.Process(
                     target=_run_live_effect_process,
                     name="run_effect",
                     args=(effect_obj["name"], effect_obj["effect"]),
                 )
-                proc.start()
-                while proc.is_alive():
-                    proc.join(timeout=0.1)
+                active_proc.start()
+                while active_proc.is_alive():
+                    active_proc.join(timeout=0.1)
                     if poll_control():
-                        proc.terminate()
-                        proc.join(timeout=1.5)
-                        if proc.is_alive():
-                            proc.kill()
+                        active_proc.terminate()
+                        active_proc.join(timeout=1.5)
+                        if active_proc.is_alive():
+                            active_proc.kill()
+                            active_proc.join(timeout=1.0)
                         break
+                active_proc = None
         except KeyboardInterrupt:
             pass
         finally:
+            if active_proc is not None and active_proc.is_alive():
+                active_proc.terminate()
+                active_proc.join(timeout=1.5)
+                if active_proc.is_alive():
+                    active_proc.kill()
+                    active_proc.join(timeout=1.0)
             publish_state("stopped", "stopped")
 
 

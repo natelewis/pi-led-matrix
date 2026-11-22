@@ -6,22 +6,29 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from .config_store import is_safe_relative_media_path
+from .effects import discover_effects
+
 
 RUNTIME_DIRNAME = "_runtime"
 STATE_FILENAME = "state.json"
 COMMAND_FILENAME = "command.json"
 LOG_FILENAME = "playlist.log"
-HEARTBEAT_STALE_SECONDS = 8.0
+HEARTBEAT_STALE_SECONDS = 12.0
 
 
 def _pid_alive(pid: int, updated_at: float) -> bool:
     if pid <= 0:
+        return False
+    # Reject stale state even if the OS recycled the PID or left a zombie
+    if updated_at > 0 and (time.time() - updated_at) > HEARTBEAT_STALE_SECONDS:
         return False
     try:
         os.kill(pid, 0)
@@ -30,13 +37,13 @@ def _pid_alive(pid: int, updated_at: float) -> bool:
         return False
     except PermissionError:
         # e.g. `sudo make playlist` running as root on Raspberry Pi
-        return (time.time() - updated_at) < HEARTBEAT_STALE_SECONDS
+        return updated_at > 0 and (time.time() - updated_at) < HEARTBEAT_STALE_SECONDS
     except OSError:
         return False
 
 
 class PlaybackController:
-    """Starts/stops the local playlist runner and sends real-time skip/jump/reload commands."""
+    """Thread-safe controller for the local playlist runner and _runtime IPC."""
 
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = repo_root.resolve()
@@ -48,11 +55,26 @@ class PlaybackController:
         self._proc: Optional[subprocess.Popen[bytes]] = None
         self._log_handle: Optional[Any] = None
 
-    def _atomic_write_json(self, path: Path, payload: Dict[str, Any]) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-        os.replace(tmp, path)
+    def _atomic_write_json_locked(self, path: Path, payload: Dict[str, Any]) -> None:
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            fd, tmp_name = tempfile.mkstemp(
+                dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp"
+            )
+            tmp_path = Path(tmp_name)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                    json.dump(payload, handle, indent=2, allow_nan=False)
+                    handle.write("\n")
+                os.replace(tmp_path, path)
+            except Exception:
+                tmp_path.unlink(missing_ok=True)
+                raise
+        except PermissionError as exc:
+            raise RuntimeError(
+                "Permission denied writing to _runtime/. If `make playlist` was started "
+                "with sudo, ensure _runtime/ is writable by the web server user."
+            ) from exc
 
     def _read_state_file(self) -> Optional[Dict[str, Any]]:
         if not self.state_path.is_file():
@@ -63,15 +85,44 @@ class PlaybackController:
         except (OSError, json.JSONDecodeError):
             return None
 
-    def _send_command(self, action: str, **extra: Any) -> Dict[str, Any]:
+    def _send_command_locked(self, action: str, **extra: Any) -> Dict[str, Any]:
         cmd = {
             "id": uuid.uuid4().hex,
             "action": action,
             "createdAt": time.time(),
             **extra,
         }
-        self._atomic_write_json(self.command_path, cmd)
+        self._atomic_write_json_locked(self.command_path, cmd)
         return cmd
+
+    def _send_command(self, action: str, **extra: Any) -> Dict[str, Any]:
+        with self._lock:
+            return self._send_command_locked(action, **extra)
+
+    def _validate_effect_request(
+        self, effect: Any, config: Any
+    ) -> tuple[str, Dict[str, Any]]:
+        if not isinstance(effect, str) or not effect.strip():
+            raise ValueError("effect name is required.")
+        effect_name = effect.strip()
+        known = {e["id"] for e in discover_effects(self.repo_root)}
+        if effect_name not in known:
+            raise ValueError(f"Unknown effect '{effect_name}'.")
+        if config is None:
+            cfg: Dict[str, Any] = {}
+        elif isinstance(config, dict):
+            cfg = dict(config)
+        else:
+            raise ValueError("config must be a JSON object.")
+        if effect_name in ("image", "video") and "file" in cfg:
+            if not is_safe_relative_media_path(cfg["file"]):
+                raise ValueError("Media file path must be a relative path without '..'.")
+        return effect_name, cfg
+
+    def _validate_index(self, index: Any) -> int:
+        if isinstance(index, bool) or not isinstance(index, int) or index < 0:
+            raise ValueError("index must be a non-negative integer.")
+        return index
 
     def _resolve_python_executable(self) -> str:
         venv_python = self.repo_root / ".venv" / "bin" / "python"
@@ -79,7 +130,7 @@ class PlaybackController:
             return str(venv_python)
         return sys.executable
 
-    def _cleanup_finished_proc(self) -> None:
+    def _cleanup_finished_proc_locked(self) -> None:
         if self._proc is not None and self._proc.poll() is not None:
             self._proc = None
             if self._log_handle is not None:
@@ -102,14 +153,13 @@ class PlaybackController:
         except OSError:
             return None
 
-    def get_status(self) -> Dict[str, Any]:
-        with self._lock:
-            self._cleanup_finished_proc()
-            managed_running = self._proc is not None and self._proc.poll() is None
-            managed_pid = self._proc.pid if managed_running and self._proc else None
+    def _get_status_locked(self) -> Dict[str, Any]:
+        self._cleanup_finished_proc_locked()
+        managed_running = self._proc is not None and self._proc.poll() is None
+        managed_pid = self._proc.pid if managed_running and self._proc else None
 
         state = self._read_state_file()
-        running = False
+        state_active = False
         pid = managed_pid
         managed = managed_running
 
@@ -117,12 +167,11 @@ class PlaybackController:
             state_pid = int(state.get("pid") or 0)
             updated_at = float(state.get("updatedAt") or 0.0)
             if _pid_alive(state_pid, updated_at):
-                running = True
+                state_active = True
                 pid = state_pid
                 managed = managed_running and (managed_pid == state_pid)
-        elif managed_running:
-            # Process just launched and hasn't written its first state.json yet
-            running = True
+
+        running = state_active or managed_running
 
         if not running:
             return {
@@ -141,7 +190,25 @@ class PlaybackController:
                 "virtual": state.get("virtual") if state else None,
             }
 
-        started_at = state.get("startedAt") if state else None
+        # Managed process just spawned and hasn't published its first live state yet
+        if not state_active or state is None:
+            return {
+                "running": True,
+                "managed": True,
+                "pid": managed_pid,
+                "status": "starting",
+                "mode": "playlist",
+                "currentIndex": None,
+                "currentEffect": None,
+                "currentConfig": None,
+                "playlistLength": None,
+                "playlistDelay": None,
+                "startedAt": None,
+                "elapsedSeconds": 0,
+                "virtual": None,
+            }
+
+        started_at = state.get("startedAt")
         elapsed = (
             max(0.0, round(time.time() - float(started_at), 1))
             if isinstance(started_at, (int, float))
@@ -152,17 +219,21 @@ class PlaybackController:
             "running": True,
             "managed": managed,
             "pid": pid,
-            "status": (state.get("status") if state else None) or "starting",
-            "mode": (state.get("mode") if state else None) or "playlist",
-            "currentIndex": state.get("currentIndex") if state else None,
-            "currentEffect": state.get("currentEffect") if state else None,
-            "currentConfig": state.get("currentConfig") if state else None,
-            "playlistLength": state.get("playlistLength") if state else None,
-            "playlistDelay": state.get("playlistDelay") if state else None,
+            "status": state.get("status") or "playing",
+            "mode": state.get("mode") or "playlist",
+            "currentIndex": state.get("currentIndex"),
+            "currentEffect": state.get("currentEffect"),
+            "currentConfig": state.get("currentConfig"),
+            "playlistLength": state.get("playlistLength"),
+            "playlistDelay": state.get("playlistDelay"),
             "startedAt": started_at,
             "elapsedSeconds": elapsed,
-            "virtual": state.get("virtual") if state else None,
+            "virtual": state.get("virtual"),
         }
+
+    def get_status(self) -> Dict[str, Any]:
+        with self._lock:
+            return self._get_status_locked()
 
     def start(
         self,
@@ -171,59 +242,70 @@ class PlaybackController:
         effect: Optional[str] = None,
         config: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        status = self.get_status()
-        if status["running"]:
-            if effect:
-                self._send_command("play_effect", effect=effect, config=config or {})
-            elif index is not None:
-                self._send_command("jump", index=index)
-            return self.get_status()
+        validated_effect: Optional[str] = None
+        validated_config: Dict[str, Any] = {}
+        validated_index: Optional[int] = None
 
-        script_path = self.repo_root / "src" / "load_playlist.py"
-        if not script_path.is_file():
-            raise RuntimeError("src/load_playlist.py not found in repository.")
-
-        # Pre-seed an initial jump/play command if requested before spawning
-        if effect:
-            self._send_command("play_effect", effect=effect, config=config or {})
+        if effect is not None:
+            validated_effect, validated_config = self._validate_effect_request(effect, config)
         elif index is not None:
-            self._send_command("jump", index=index)
-
-        python_bin = self._resolve_python_executable()
-        self.runtime_dir.mkdir(parents=True, exist_ok=True)
+            validated_index = self._validate_index(index)
 
         with self._lock:
-            self._cleanup_finished_proc()
+            status = self._get_status_locked()
+            if status["running"]:
+                if validated_effect is not None:
+                    self._send_command_locked(
+                        "play_effect", effect=validated_effect, config=validated_config
+                    )
+                elif validated_index is not None:
+                    self._send_command_locked("jump", index=validated_index)
+                return self._get_status_locked()
+
+            script_path = self.repo_root / "src" / "load_playlist.py"
+            if not script_path.is_file():
+                raise RuntimeError("src/load_playlist.py not found in repository.")
+
+            if validated_effect is not None:
+                self._send_command_locked(
+                    "play_effect", effect=validated_effect, config=validated_config
+                )
+            elif validated_index is not None:
+                self._send_command_locked("jump", index=validated_index)
+
+            python_bin = self._resolve_python_executable()
+            self.runtime_dir.mkdir(parents=True, exist_ok=True)
+            self._cleanup_finished_proc_locked()
             self._log_handle = self.log_path.open("wb")
             env = dict(os.environ)
             env.setdefault("PYTHONUNBUFFERED", "1")
-            self._proc = subprocess.Popen(
+            proc = subprocess.Popen(
                 [python_bin, str(script_path)],
                 cwd=str(self.repo_root),
                 stdout=self._log_handle,
                 stderr=subprocess.STDOUT,
                 env=env,
             )
+            self._proc = proc
 
-        # Give it a brief moment to detect immediate startup failures (e.g. missing venv deps)
+        # Briefly verify it didn't immediately crash on import/startup
         time.sleep(0.25)
         with self._lock:
-            if self._proc is not None and self._proc.poll() is not None:
-                code = self._proc.returncode
-                self._cleanup_finished_proc()
+            if self._proc is proc and proc.poll() is not None:
+                code = proc.returncode
+                self._cleanup_finished_proc_locked()
                 last_line = self._read_last_log_line()
                 raise RuntimeError(
                     f"Playlist runner exited immediately (code {code})"
                     + (f": {last_line}" if last_line else ".")
                 )
-
-        return self.get_status()
+            return self._get_status_locked()
 
     def stop(self) -> Dict[str, Any]:
-        self._send_command("stop")
-
         with self._lock:
+            self._send_command_locked("stop")
             proc = self._proc
+
         if proc is not None and proc.poll() is None:
             try:
                 proc.wait(timeout=2.0)
@@ -233,43 +315,52 @@ class PlaybackController:
                     proc.wait(timeout=1.5)
                 except subprocess.TimeoutExpired:
                     proc.kill()
+                    try:
+                        proc.wait(timeout=1.0)
+                    except subprocess.TimeoutExpired:
+                        pass
             with self._lock:
-                self._cleanup_finished_proc()
+                self._cleanup_finished_proc_locked()
         else:
-            # Allow external `make playlist` process a brief moment to see the stop command
             time.sleep(0.2)
 
         return self.get_status()
 
     def skip_next(self) -> Dict[str, Any]:
-        if not self.get_status()["running"]:
-            return self.start()
-        self._send_command("next")
-        return self.get_status()
+        with self._lock:
+            if self._get_status_locked()["running"]:
+                self._send_command_locked("next")
+                return self._get_status_locked()
+        return self.start()
 
     def jump_to(self, index: int) -> Dict[str, Any]:
-        if isinstance(index, bool) or not isinstance(index, int) or index < 0:
-            raise ValueError("index must be a non-negative integer.")
-        if not self.get_status()["running"]:
-            return self.start(index=index)
-        self._send_command("jump", index=index)
-        return self.get_status()
+        validated_index = self._validate_index(index)
+        with self._lock:
+            if self._get_status_locked()["running"]:
+                self._send_command_locked("jump", index=validated_index)
+                return self._get_status_locked()
+        return self.start(index=validated_index)
 
     def play_effect(
         self, effect: str, config: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        if not isinstance(effect, str) or not effect.strip():
-            raise ValueError("effect name is required.")
-        cfg = config if isinstance(config, dict) else {}
-        if not self.get_status()["running"]:
-            return self.start(effect=effect.strip(), config=cfg)
-        self._send_command("play_effect", effect=effect.strip(), config=cfg)
-        return self.get_status()
+        validated_effect, validated_config = self._validate_effect_request(effect, config)
+        with self._lock:
+            if self._get_status_locked()["running"]:
+                self._send_command_locked(
+                    "play_effect", effect=validated_effect, config=validated_config
+                )
+                return self._get_status_locked()
+        return self.start(effect=validated_effect, config=validated_config)
 
     def notify_config_updated(self) -> None:
-        """Let any live runner know config.json changed (it also polls mtime)."""
-        if self.get_status()["running"]:
-            self._send_command("reload")
+        """Notify any live runner of config.json changes (non-destructive reload)."""
+        with self._lock:
+            if self._get_status_locked()["running"]:
+                try:
+                    self._send_command_locked("reload")
+                except RuntimeError:
+                    pass
 
     def shutdown(self) -> None:
         with self._lock:

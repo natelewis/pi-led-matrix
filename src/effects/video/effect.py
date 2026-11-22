@@ -1,7 +1,6 @@
 import math
-import sys
 import time
-from os.path import exists
+from pathlib import Path
 
 import cv2
 from PIL import Image
@@ -11,6 +10,20 @@ USAGE_TEXT = (
     'Usage: make run effect=video config=\'{"file":"video-file.mp4"}\''
 )
 CHANNEL_INDEX = {"r": 0, "g": 1, "b": 2}
+
+
+def _resolve_safe_video_path(effect_dir, raw_file):
+    if not isinstance(raw_file, str) or not raw_file.strip():
+        raise ValueError("Missing video file in effect config.")
+    base_dir = Path(effect_dir).resolve()
+    candidate = (base_dir / raw_file.strip()).resolve()
+    try:
+        candidate.relative_to(base_dir)
+    except ValueError as exc:
+        raise ValueError("Video path must reside inside the video effect directory.") from exc
+    if not candidate.is_file():
+        raise FileNotFoundError(f"Video file not found: {raw_file}")
+    return candidate
 
 
 def _resolve_fps(cap):
@@ -44,37 +57,44 @@ def run(matrix, config):
     pixel_width = config["pixel_width"]
     pixel_height = config["pixel_height"]
     effect_cfg = config.get("effect") or {}
-    if not isinstance(effect_cfg, dict) or not effect_cfg.get("file"):
-        print("Error: missing video file in effect config")
+    if not isinstance(effect_cfg, dict):
+        print("Error: invalid video effect config")
         print(USAGE_TEXT)
-        sys.exit(1)
+        raise ValueError("Invalid video effect config")
 
-    video_file = effect_dir + "/" + effect_cfg["file"]
+    video_path = _resolve_safe_video_path(effect_dir, effect_cfg.get("file"))
+    video_file = str(video_path)
     print("Playing video file: ", video_file)
 
-    if not exists(video_file):
-        print("Error: file not found")
-        print(USAGE_TEXT)
-        sys.exit(1)
-
-    speed = float(effect_cfg.get("speed", 1.0) or 1.0)
-    if speed <= 0:
+    try:
+        speed = float(effect_cfg.get("speed", 1.0) or 1.0)
+    except (TypeError, ValueError):
+        speed = 1.0
+    if not math.isfinite(speed) or speed <= 0 or speed > 16.0:
         speed = 1.0
 
     color_order = config.get("color_order", "rgb").lower()
-    channel_order = [CHANNEL_INDEX[ch] for ch in color_order] if color_order != "rgb" else None
+    channel_order = (
+        [CHANNEL_INDEX[ch] for ch in color_order] if color_order != "rgb" else None
+    )
 
     cap = cv2.VideoCapture(video_file)
     if not cap.isOpened():
-        print("Error: unable to open video file")
-        sys.exit(1)
+        raise RuntimeError(f"Unable to open video file: {video_file}")
 
     fps = _resolve_fps(cap)
     frame_duration = 1.0 / (fps * speed)
 
     try:
+        loop_count = 0
         while matrix.ready():
-            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            if loop_count > 0:
+                if not cap.set(cv2.CAP_PROP_POS_FRAMES, 0):
+                    cap.release()
+                    cap = cv2.VideoCapture(video_file)
+                    if not cap.isOpened():
+                        break
+            loop_count += 1
             loop_start = time.monotonic()
             frame_index = 0
 
@@ -127,6 +147,13 @@ def run(matrix, config):
 
             # Avoid a tight spin if the video has 0 decodable frames
             if frame_index == 0:
+                # Try one reopen fallback in case seek-to-0 failed silently
+                if loop_count > 1:
+                    cap.release()
+                    cap = cv2.VideoCapture(video_file)
+                    if cap.isOpened():
+                        loop_count = 0
+                        continue
                 print("Error: no readable frames in video file")
                 break
     finally:

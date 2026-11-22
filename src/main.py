@@ -297,6 +297,17 @@ class VirtualMatrix:
     def show(self, delay_ms=None):
         self._poll_events()
 
+        # Frame-budgeted pacing BEFORE building the surface so any runtime
+        # layout changes triggered during delay() apply to this frame cleanly.
+        if delay_ms is None:
+            if self._last_show_time is not None and virtual_framerate > 0:
+                elapsed_ms = (time.monotonic() - self._last_show_time) * 1000.0
+                remaining_ms = int(round(virtual_framerate - elapsed_ms))
+                if remaining_ms > 0:
+                    self.delay(remaining_ms)
+        elif delay_ms > 0:
+            self.delay(delay_ms)
+
         cell = self.layout["cell"]
         enhanced = led_image.enhance(self.frame, color, contrast)
         scaled = np.repeat(np.repeat(enhanced, cell, axis=0), cell, axis=1)
@@ -308,17 +319,6 @@ class VirtualMatrix:
             (self.layout["draw_w"], self.layout["draw_h"]),
             "RGB",
         )
-
-        # Frame-budgeted pacing: sleep only the remaining slice of virtual_framerate
-        # so heavy render frames don't double-delay and timed effects aren't padded.
-        if delay_ms is None:
-            if self._last_show_time is not None and virtual_framerate > 0:
-                elapsed_ms = (time.monotonic() - self._last_show_time) * 1000.0
-                remaining_ms = int(round(virtual_framerate - elapsed_ms))
-                if remaining_ms > 0:
-                    self.delay(remaining_ms)
-        elif delay_ms > 0:
-            self.delay(delay_ms)
 
         self.screen.fill((0, 0, 0))
         self.screen.blit(surface, (self.layout["offset_x"], self.layout["offset_y"]))
@@ -410,6 +410,8 @@ class LiveMatrix:
 
     def image(self, img):
         rgb_image = img.convert("RGB")
+        if rgb_image.size != (pixel_width, pixel_height):
+            rgb_image = rgb_image.resize((pixel_width, pixel_height), Image.NEAREST)
         self.frame = np.array(rgb_image)
 
     def line(self, start, end, rgb_color, width):

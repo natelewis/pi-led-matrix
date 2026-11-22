@@ -1,16 +1,19 @@
-"""Image upload, RGBA PNG encoding, and safe asset management for the image effect."""
+"""Image and video upload, encoding, transcoding, and safe asset management."""
 
 from __future__ import annotations
 
 import base64
 import binascii
 import json
+import math
 import os
 import re
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
+import threading
 import zlib
 from pathlib import Path
 from typing import Any, BinaryIO, Dict, List, Optional, Tuple
@@ -23,6 +26,10 @@ UPLOADS_DIRNAME = "_uploads"
 MAX_DIMENSION = 1024
 MAX_VIDEO_UPLOAD_BYTES = 250 * 1024 * 1024  # 250 MiB
 
+_PROBE_CACHE_LOCK = threading.Lock()
+_PROBE_CACHE: Dict[Tuple[str, int, int], Dict[str, Optional[float]]] = {}
+_PROBE_CACHE_MAX = 512
+
 
 def _png_chunk(chunk_type: bytes, data: bytes) -> bytes:
     crc = zlib.crc32(chunk_type + data) & 0xFFFFFFFF
@@ -30,11 +37,7 @@ def _png_chunk(chunk_type: bytes, data: bytes) -> bytes:
 
 
 def encode_rgba_png(width: int, height: int, rgba_bytes: bytes) -> bytes:
-    """Encode raw 8-bit RGBA bytes into a spec-compliant 32-bit RGBA PNG (color_type=6).
-
-    Guaranteed 4-channel RGBA output so `r, g, b, _ = image.split()` in
-    `src/effects/image/effect.py` always succeeds.
-    """
+    """Encode raw 8-bit RGBA bytes into a spec-compliant 32-bit RGBA PNG (color_type=6)."""
     expected = width * height * 4
     if len(rgba_bytes) != expected:
         raise ValueError(
@@ -73,19 +76,60 @@ def inspect_png_header(data: bytes) -> Optional[Tuple[int, int, int]]:
 
 def sanitize_slug(filename: str) -> str:
     stem = Path(filename).stem.lower()
-    # Strip any existing trailing _WxH suffix so re-uploads don't stack suffixes
     stem = re.sub(r"_\d+x\d+$", "", stem)
     slug = re.sub(r"[^a-z0-9_-]+", "_", stem).strip("_")
-    return slug[:60] or "image"
+    return slug[:60] or "media"
+
+
+def _resolve_contained_path(
+    root_dir: Path,
+    uploads_dir: Path,
+    rel_file: str,
+    allowed_extensions: set[str],
+    *,
+    uploads_only: bool = False,
+) -> Path:
+    cleaned = rel_file.strip().lstrip("/")
+    if not cleaned or "\\" in cleaned or ".." in Path(cleaned).parts:
+        raise ValueError("Invalid media file path.")
+    candidate = (root_dir / cleaned).resolve()
+    base_dir = uploads_dir if uploads_only else root_dir
+    try:
+        candidate.relative_to(base_dir)
+    except ValueError as exc:
+        raise ValueError("Media path outside permitted directory.") from exc
+    if candidate.suffix.lower() not in allowed_extensions:
+        raise ValueError("Unsupported media file extension.")
+    return candidate
+
+
+def _iter_media_files(directory: Path, allowed_extensions: set[str]) -> List[Tuple[Path, os.stat_result]]:
+    """Safely collect files + stat results sorted newest-first without racing transient files."""
+    if not directory.is_dir():
+        return []
+    entries: List[Tuple[Path, os.stat_result]] = []
+    for entry in directory.iterdir():
+        if entry.suffix.lower() not in allowed_extensions:
+            continue
+        try:
+            if not entry.is_file():
+                continue
+            stat = entry.stat()
+        except OSError:
+            continue
+        entries.append((entry, stat))
+    entries.sort(key=lambda item: item[1].st_mtime, reverse=True)
+    return entries
 
 
 class ImageMediaStore:
-    """Manages images in src/effects/image/ and uploads in src/effects/image/_uploads/."""
+    """Thread-safe manager for src/effects/image/ and src/effects/image/_uploads/."""
 
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = repo_root.resolve()
         self.image_effect_dir = (self.repo_root / "src" / "effects" / "image").resolve()
         self.uploads_dir = (self.image_effect_dir / UPLOADS_DIRNAME).resolve()
+        self._lock = threading.Lock()
 
     def list_images(self) -> List[Dict[str, Any]]:
         if not self.image_effect_dir.is_dir():
@@ -94,13 +138,7 @@ class ImageMediaStore:
         items: List[Dict[str, Any]] = []
 
         def collect(directory: Path, prefix: str, uploaded: bool) -> None:
-            if not directory.is_dir():
-                return
-            for entry in sorted(directory.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
-                if not entry.is_file() or entry.suffix.lower() not in IMAGE_EXTENSIONS:
-                    continue
-                rel_name = f"{prefix}{entry.name}"
-                stat = entry.stat()
+            for entry, stat in _iter_media_files(directory, IMAGE_EXTENSIONS):
                 dims = None
                 if entry.suffix.lower() == ".png":
                     try:
@@ -112,7 +150,7 @@ class ImageMediaStore:
                         pass
                 items.append(
                     {
-                        "file": rel_name,
+                        "file": f"{prefix}{entry.name}",
                         "name": entry.name,
                         "uploaded": uploaded,
                         "sizeBytes": stat.st_size,
@@ -126,18 +164,13 @@ class ImageMediaStore:
         return items
 
     def resolve_image_path(self, rel_file: str, *, uploads_only: bool = False) -> Path:
-        cleaned = rel_file.strip().lstrip("/")
-        if not cleaned or ".." in Path(cleaned).parts:
-            raise ValueError("Invalid image path.")
-        candidate = (self.image_effect_dir / cleaned).resolve()
-        base_dir = self.uploads_dir if uploads_only else self.image_effect_dir
-        try:
-            candidate.relative_to(base_dir)
-        except ValueError as exc:
-            raise ValueError("Image path outside permitted directory.") from exc
-        if candidate.suffix.lower() not in IMAGE_EXTENSIONS:
-            raise ValueError("Unsupported image file extension.")
-        return candidate
+        return _resolve_contained_path(
+            self.image_effect_dir,
+            self.uploads_dir,
+            rel_file,
+            IMAGE_EXTENSIONS,
+            uploads_only=uploads_only,
+        )
 
     def save_uploaded_rgba(
         self,
@@ -159,24 +192,29 @@ class ImageMediaStore:
 
         png_bytes = encode_rgba_png(width, height, rgba_bytes)
 
-        self.uploads_dir.mkdir(parents=True, exist_ok=True)
-        slug = sanitize_slug(filename)
-        base_name = f"{slug}_{width}x{height}.png"
-        target = self.uploads_dir / base_name
+        with self._lock:
+            self.uploads_dir.mkdir(parents=True, exist_ok=True)
+            slug = sanitize_slug(filename)
+            target = self.uploads_dir / f"{slug}_{width}x{height}.png"
+            counter = 2
+            while target.exists():
+                target = self.uploads_dir / f"{slug}_{counter}_{width}x{height}.png"
+                counter += 1
 
-        # Avoid clobbering a different file if same name already exists
-        counter = 2
-        while target.exists():
-            target = self.uploads_dir / f"{slug}_{counter}_{width}x{height}.png"
-            counter += 1
+            fd, tmp_name = tempfile.mkstemp(
+                dir=str(self.uploads_dir), prefix=".img_", suffix=".tmp"
+            )
+            tmp_path = Path(tmp_name)
+            try:
+                with os.fdopen(fd, "wb") as handle:
+                    handle.write(png_bytes)
+                os.replace(tmp_path, target)
+            except Exception:
+                tmp_path.unlink(missing_ok=True)
+                raise
 
-        tmp_path = target.with_suffix(".png.tmp")
-        tmp_path.write_bytes(png_bytes)
-        os.replace(tmp_path, target)
-
-        rel_file = f"{UPLOADS_DIRNAME}/{target.name}"
         return {
-            "file": rel_file,
+            "file": f"{UPLOADS_DIRNAME}/{target.name}",
             "name": target.name,
             "uploaded": True,
             "sizeBytes": len(png_bytes),
@@ -186,16 +224,29 @@ class ImageMediaStore:
 
     def delete_upload(self, rel_file: str) -> bool:
         target = self.resolve_image_path(rel_file, uploads_only=True)
-        if not target.is_file():
-            return False
-        target.unlink()
-        return True
+        with self._lock:
+            if not target.is_file():
+                return False
+            target.unlink()
+            return True
 
 
 def probe_video_metadata(video_path: Path) -> Dict[str, Optional[float]]:
-    """Use ffprobe (if installed) to inspect width, height, and duration."""
+    """Use ffprobe (cached by path/mtime/size) to inspect width, height, and duration."""
     if not shutil.which("ffprobe"):
         return {"width": None, "height": None, "duration": None}
+    try:
+        stat = video_path.stat()
+    except OSError:
+        return {"width": None, "height": None, "duration": None}
+
+    cache_key = (str(video_path), stat.st_mtime_ns, stat.st_size)
+    with _PROBE_CACHE_LOCK:
+        cached = _PROBE_CACHE.get(cache_key)
+        if cached is not None:
+            return dict(cached)
+
+    meta: Dict[str, Optional[float]] = {"width": None, "height": None, "duration": None}
     try:
         result = subprocess.run(
             [
@@ -215,32 +266,39 @@ def probe_video_metadata(video_path: Path) -> Dict[str, Optional[float]]:
             timeout=10,
             check=False,
         )
-        if result.returncode != 0:
-            return {"width": None, "height": None, "duration": None}
-        payload = json.loads(result.stdout or "{}")
-        streams = payload.get("streams") or []
-        stream0 = streams[0] if streams else {}
-        fmt = payload.get("format") or {}
-        width = stream0.get("width")
-        height = stream0.get("height")
-        raw_dur = fmt.get("duration")
-        duration = round(float(raw_dur), 2) if raw_dur is not None else None
-        return {
-            "width": int(width) if width is not None else None,
-            "height": int(height) if height is not None else None,
-            "duration": duration,
-        }
+        if result.returncode == 0:
+            payload = json.loads(result.stdout or "{}")
+            streams = payload.get("streams") or []
+            stream0 = streams[0] if streams else {}
+            fmt = payload.get("format") or {}
+            width = stream0.get("width")
+            height = stream0.get("height")
+            raw_dur = fmt.get("duration")
+            duration = round(float(raw_dur), 2) if raw_dur is not None else None
+            meta = {
+                "width": int(width) if width is not None else None,
+                "height": int(height) if height is not None else None,
+                "duration": duration,
+            }
     except (OSError, ValueError, json.JSONDecodeError, subprocess.SubprocessError):
-        return {"width": None, "height": None, "duration": None}
+        pass
+
+    with _PROBE_CACHE_LOCK:
+        if len(_PROBE_CACHE) >= _PROBE_CACHE_MAX:
+            _PROBE_CACHE.clear()
+        _PROBE_CACHE[cache_key] = dict(meta)
+    return meta
 
 
 class VideoMediaStore:
-    """Manages videos in src/effects/video/ and uploads in src/effects/video/_uploads/."""
+    """Thread-safe manager for src/effects/video/ and src/effects/video/_uploads/."""
 
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = repo_root.resolve()
         self.video_effect_dir = (self.repo_root / "src" / "effects" / "video").resolve()
         self.uploads_dir = (self.video_effect_dir / UPLOADS_DIRNAME).resolve()
+        self._lock = threading.Lock()
+        self._transcode_semaphore = threading.Semaphore(1)
 
     def list_videos(self) -> List[Dict[str, Any]]:
         if not self.video_effect_dir.is_dir():
@@ -249,14 +307,7 @@ class VideoMediaStore:
         items: List[Dict[str, Any]] = []
 
         def collect(directory: Path, prefix: str, uploaded: bool) -> None:
-            if not directory.is_dir():
-                return
-            for entry in sorted(
-                directory.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True
-            ):
-                if not entry.is_file() or entry.suffix.lower() not in VIDEO_EXTENSIONS:
-                    continue
-                stat = entry.stat()
+            for entry, stat in _iter_media_files(directory, VIDEO_EXTENSIONS):
                 meta = probe_video_metadata(entry)
                 items.append(
                     {
@@ -275,18 +326,13 @@ class VideoMediaStore:
         return items
 
     def resolve_video_path(self, rel_file: str, *, uploads_only: bool = False) -> Path:
-        cleaned = rel_file.strip().lstrip("/")
-        if not cleaned or ".." in Path(cleaned).parts:
-            raise ValueError("Invalid video path.")
-        candidate = (self.video_effect_dir / cleaned).resolve()
-        base_dir = self.uploads_dir if uploads_only else self.video_effect_dir
-        try:
-            candidate.relative_to(base_dir)
-        except ValueError as exc:
-            raise ValueError("Video path outside permitted directory.") from exc
-        if candidate.suffix.lower() not in VIDEO_EXTENSIONS:
-            raise ValueError("Unsupported video file extension.")
-        return candidate
+        return _resolve_contained_path(
+            self.video_effect_dir,
+            self.uploads_dir,
+            rel_file,
+            VIDEO_EXTENSIONS,
+            uploads_only=uploads_only,
+        )
 
     def save_uploaded_stream(
         self,
@@ -305,30 +351,43 @@ class VideoMediaStore:
             raise RuntimeError(
                 "ffmpeg is required to resize uploaded videos. Install ffmpeg and try again."
             )
-        if not (1 <= width <= MAX_DIMENSION) or not (1 <= height <= MAX_DIMENSION):
+        if (
+            isinstance(width, bool)
+            or isinstance(height, bool)
+            or not (1 <= width <= MAX_DIMENSION)
+            or not (1 <= height <= MAX_DIMENSION)
+        ):
             raise ValueError(f"Dimensions must be between 1 and {MAX_DIMENSION}.")
         if content_length <= 0 or content_length > MAX_VIDEO_UPLOAD_BYTES:
             raise ValueError("Video file is empty or exceeds the 250 MiB upload limit.")
         if fit_mode not in {"crop", "contain", "stretch"}:
             raise ValueError("fitMode must be one of: crop, contain, stretch.")
+        if start_sec is not None and (not math.isfinite(start_sec) or start_sec < 0):
+            raise ValueError("startSec must be a finite non-negative number.")
+        if end_sec is not None and (not math.isfinite(end_sec) or end_sec < 0):
+            raise ValueError("endSec must be a finite non-negative number.")
+        if start_sec is not None and end_sec is not None and end_sec <= start_sec:
+            raise ValueError("endSec must be greater than startSec.")
 
-        self.uploads_dir.mkdir(parents=True, exist_ok=True)
-        slug = sanitize_slug(filename)
-        target = self.uploads_dir / f"{slug}_{width}x{height}.mp4"
-        counter = 2
-        while target.exists():
-            target = self.uploads_dir / f"{slug}_{counter}_{width}x{height}.mp4"
-            counter += 1
+        if fit_mode == "crop" and crop_rect is not None:
+            cx, cy, cw, ch = crop_rect
+            if cw <= 0 or ch <= 0 or cx < 0 or cy < 0:
+                raise ValueError("Invalid crop rectangle.")
 
         src_ext = Path(filename).suffix.lower()
         if src_ext not in VIDEO_EXTENSIONS:
             src_ext = ".mp4"
 
+        self.uploads_dir.mkdir(parents=True, exist_ok=True)
         tmp_input_fd, tmp_input_str = tempfile.mkstemp(
             prefix="led_vid_in_", suffix=src_ext
         )
         tmp_input = Path(tmp_input_str)
-        tmp_output = target.with_name(f".{target.stem}.tmp.mp4")
+        tmp_out_fd, tmp_out_str = tempfile.mkstemp(
+            dir=str(self.uploads_dir), prefix=".vid_out_", suffix=".mp4"
+        )
+        os.close(tmp_out_fd)
+        tmp_output = Path(tmp_out_str)
 
         try:
             # Stream request body directly to disk in 64 KiB chunks
@@ -341,11 +400,12 @@ class VideoMediaStore:
                     out_f.write(chunk)
                     remaining -= len(chunk)
 
+            if remaining > 0:
+                raise ValueError("Upload stream was truncated before completion.")
+
             if fit_mode == "crop":
                 if crop_rect is not None:
                     cx, cy, cw, ch = crop_rect
-                    if cw <= 0 or ch <= 0 or cx < 0 or cy < 0:
-                        raise ValueError("Invalid crop rectangle.")
                     vf = f"crop={cw}:{ch}:{cx}:{cy},scale={width}:{height}:flags=lanczos"
                 else:
                     vf = (
@@ -389,18 +449,30 @@ class VideoMediaStore:
                 ]
             )
 
-            proc = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=300,
-                check=False,
-            )
-            if proc.returncode != 0 or not tmp_output.is_file():
-                err_msg = (proc.stderr or "").strip() or "ffmpeg failed to process the video."
-                raise RuntimeError(err_msg)
+            # Serialize ffmpeg transcoding so concurrent uploads cannot exhaust Pi CPU/RAM
+            with self._transcode_semaphore:
+                proc = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                    check=False,
+                )
 
-            os.replace(tmp_output, target)
+            if proc.returncode != 0 or not tmp_output.is_file():
+                if proc.stderr:
+                    print(f"[video-upload] ffmpeg error: {proc.stderr.strip()}", file=sys.stderr)
+                raise RuntimeError("Failed to transcode video with ffmpeg. Check that the file is a valid video.")
+
+            with self._lock:
+                slug = sanitize_slug(filename)
+                target = self.uploads_dir / f"{slug}_{width}x{height}.mp4"
+                counter = 2
+                while target.exists():
+                    target = self.uploads_dir / f"{slug}_{counter}_{width}x{height}.mp4"
+                    counter += 1
+                os.replace(tmp_output, target)
+
             meta = probe_video_metadata(target)
             stat = target.stat()
             return {
@@ -418,7 +490,8 @@ class VideoMediaStore:
 
     def delete_upload(self, rel_file: str) -> bool:
         target = self.resolve_video_path(rel_file, uploads_only=True)
-        if not target.is_file():
-            return False
-        target.unlink()
-        return True
+        with self._lock:
+            if not target.is_file():
+                return False
+            target.unlink()
+            return True
