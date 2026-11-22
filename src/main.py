@@ -265,10 +265,10 @@ class VirtualMatrix:
         cv2.circle(self.frame, center, radius, rgb_color, width)
 
     def polylines(self, points, rgb_color, width):
-        cv2.polylines(self.frame, points, True, self.bgr_color_swap(rgb_color), width)
+        cv2.polylines(self.frame, points, True, rgb_color, width)
 
     def polyfill(self, points, rgb_color):
-        cv2.fillPoly(self.frame, points, self.bgr_color_swap(rgb_color))
+        cv2.fillPoly(self.frame, points, rgb_color)
 
     def text(self, message, start, font_size, rgb_color, font="dosis.ttf"):
         led_text.text(self, message, start, font_size, rgb_color, font)
