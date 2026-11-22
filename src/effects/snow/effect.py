@@ -4,29 +4,30 @@ from operator import itemgetter
 
 def run(matrix, config):
     """falling snow"""
-    snow_flake_count = 60
+    width = config["pixel_width"]
+    height = config["pixel_height"]
+    snow_flake_count = max(20, (width * height) // 30)
     random_delay = 10  # 1 in x chance of falling when reset to top
-    snow_flakes = [{"y": -1, "x": 0}] * snow_flake_count
+    snow_flakes = [{"y": -1, "x": 0} for _ in range(snow_flake_count)]
+
     while matrix.ready():
         matrix.reset()
-        for idx, _ in enumerate(snow_flakes):
-            x, y = itemgetter("x", "y")(snow_flakes[idx])
+        for idx, flake in enumerate(snow_flakes):
+            x, y = itemgetter("x", "y")(flake)
 
-            # if fell to the bottom reset to the top
-            if y > config["pixel_height"]:
+            if y >= height:
                 y = -1
 
-            # move it down if it is falling
             if y > -1:
                 y = y + 1
 
-            # reset it to the top at random if ready
             if y == -1:
-                x = int(random.random() * config["pixel_width"] - 1)
-                if int(random.random() * random_delay) == 0:
+                x = random.randrange(width)
+                if random.randrange(random_delay) == 0:
                     y = 0
 
             snow_flakes[idx] = {"x": x, "y": y}
-            matrix.pixel((x, y), (255, 255, 255))
+            if y >= 0:
+                matrix.pixel((x, y), (255, 255, 255))
 
         matrix.show()
