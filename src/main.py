@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import time
 import warnings
 
 from PIL import Image
@@ -104,6 +105,42 @@ else:
 color_order = "rgb" if VIRTUAL_ENV else cfg["color_order"]
 
 
+def reload_config():
+    """Reload config.json (or default_config.json) into module globals at runtime."""
+    global CUSTOM_CONFIG, CONFIG, cfg
+    global pixel_pins, pixel_width, pixel_height
+    global brightness, contrast, color, alternating
+    global virtual_framerate, virtual_mode, virtual_fullscreen, virtual_led_dots
+    global playlist, playlist_delay, color_order
+
+    CUSTOM_CONFIG = os.path.exists("config.json")
+    CONFIG = "default_config.json" if not CUSTOM_CONFIG else "config.json"
+    with open(CONFIG, mode="r", encoding="utf8") as handle:
+        new_cfg = json.load(handle)
+
+    prev_dims = (pixel_width, pixel_height)
+    cfg = new_cfg
+    pixel_pins = cfg["pixel_pins"]
+    pixel_width = cfg["pixel_width"]
+    pixel_height = cfg["pixel_height"]
+    brightness = cfg["brightness"]
+    contrast = cfg["contrast"]
+    color = cfg["color"]
+    alternating = cfg["alternating"]
+    virtual_framerate = cfg["virtual_framerate"]
+    virtual_mode = cfg.get("virtual", False) or os.environ.get("VIRTUAL_MATRIX") == "1"
+    virtual_fullscreen = cfg.get("virtual_fullscreen", False)
+    virtual_led_dots = cfg.get("virtual_led_dots", True)
+    playlist = cfg["playlist"]
+    playlist_delay = cfg["playlist_delay"]
+    color_order = "rgb" if VIRTUAL_ENV else cfg["color_order"]
+
+    return {
+        "dims_changed": prev_dims != (pixel_width, pixel_height),
+        "cfg": cfg,
+    }
+
+
 class VirtualMatrix:
     def __init__(self):
         os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
@@ -131,6 +168,38 @@ class VirtualMatrix:
         self._init_display()
         self.reset()
         self.start_time = led_time.get_start_time()
+        self._last_show_time = None
+        self._interrupt_check = None
+        self._last_interrupt_poll = 0.0
+        self._interrupted = False
+
+    def set_interrupt_check(self, fn):
+        self._interrupt_check = fn
+
+    def apply_runtime_config(self, dims_changed=False):
+        needs_reinit = dims_changed or (self.fullscreen != virtual_fullscreen)
+        dots_changed = self.led_dots != virtual_led_dots
+        self.fullscreen = virtual_fullscreen
+        self.led_dots = virtual_led_dots
+        if needs_reinit:
+            self._init_display()
+            self.reset()
+        elif dots_changed:
+            self._update_layout()
+
+    def _check_interrupt(self):
+        if self._interrupted:
+            return True
+        if self._interrupt_check is None:
+            return False
+        now = time.monotonic()
+        if now - self._last_interrupt_poll >= 0.08:
+            self._last_interrupt_poll = now
+            if self._interrupt_check():
+                self._interrupted = True
+                self.start_time = 0
+                return True
+        return False
 
     def _init_display(self):
         if self.fullscreen:
@@ -202,8 +271,12 @@ class VirtualMatrix:
 
     def reset_timer(self):
         self.start_time = led_time.get_start_time()
+        self._last_show_time = None
+        self._interrupted = False
 
     def ready(self):
+        if self._check_interrupt():
+            return False
         return led_time.ready(self.start_time, playlist_delay)
 
     def color(self, color_name):
@@ -221,7 +294,7 @@ class VirtualMatrix:
             rgb_image = rgb_image.resize((pixel_width, pixel_height), Image.NEAREST)
         self.frame = np.array(rgb_image)
 
-    def show(self):
+    def show(self, delay_ms=None):
         self._poll_events()
 
         cell = self.layout["cell"]
@@ -235,11 +308,22 @@ class VirtualMatrix:
             (self.layout["draw_w"], self.layout["draw_h"]),
             "RGB",
         )
+
+        # Frame-budgeted pacing: sleep only the remaining slice of virtual_framerate
+        # so heavy render frames don't double-delay and timed effects aren't padded.
+        if delay_ms is None:
+            if self._last_show_time is not None and virtual_framerate > 0:
+                elapsed_ms = (time.monotonic() - self._last_show_time) * 1000.0
+                remaining_ms = int(round(virtual_framerate - elapsed_ms))
+                if remaining_ms > 0:
+                    self.delay(remaining_ms)
+        elif delay_ms > 0:
+            self.delay(delay_ms)
+
         self.screen.fill((0, 0, 0))
         self.screen.blit(surface, (self.layout["offset_x"], self.layout["offset_y"]))
         self.pygame.display.flip()
-
-        self.delay(virtual_framerate)
+        self._last_show_time = time.monotonic()
 
     def reset(self, rgb_color=(0, 0, 0)):
         self.frame = np.full([pixel_height, pixel_width, 3], rgb_color, np.uint8)
@@ -248,6 +332,8 @@ class VirtualMatrix:
         remaining = int(ms)
         while remaining > 0 and self.start_time != 0:
             self._poll_events()
+            if self._check_interrupt():
+                break
             step = min(remaining, 25)
             self.pygame.time.wait(step)
             remaining -= step
@@ -356,7 +442,7 @@ class LiveMatrix:
     def sprite(self, sprite_map, start, color_map):
         led_image.sprite(self, sprite_map, start, color_map)
 
-    def show(self):
+    def show(self, delay_ms=None):
         for index, _ in enumerate(pixel_pins):
             # Calculate start and end positions for slicing the frame
             start_x = index * self.panel_width
@@ -372,6 +458,9 @@ class LiveMatrix:
 
         for index, _ in enumerate(pixel_pins):
             self.buffers[index].display()
+
+        if delay_ms is not None and delay_ms > 0:
+            self.delay(delay_ms)
 
     def text(self, message, start, font_size, rgb_color, font="dosis.ttf"):
         led_text.text(
