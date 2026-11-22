@@ -69,6 +69,8 @@ if __name__ == "__main__":
                 run_effect(random.randrange(len(effects)), shared_matrix)
         except KeyboardInterrupt:
             pass
+        finally:
+            shared_matrix.close()
     else:
         multiprocessing.set_start_method("spawn")
         while True:

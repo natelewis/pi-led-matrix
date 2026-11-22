@@ -57,8 +57,6 @@ contrast = cfg["contrast"]
 # color (1 is no change)
 color = cfg["color"]
 
-# color rgb swap, default is string 'rgb' which does not swap any color
-color_order = cfg["color_order"]
 
 # alternating determines if the LED matrix is wired in a zigzag pattern
 alternating = cfg["alternating"]
@@ -101,6 +99,9 @@ if not VIRTUAL_ENV:
         board = MockBoard()
 else:
     board = MockBoard()
+
+# color rgb swap, default is string 'rgb' which does not swap any color
+color_order = "rgb" if VIRTUAL_ENV else cfg["color_order"]
 
 
 class VirtualMatrix:
@@ -178,9 +179,6 @@ class VirtualMatrix:
                 self.pygame.quit()
                 sys.exit(0)
             if event.type == self.pygame.VIDEORESIZE and not self.fullscreen:
-                self.screen = self.pygame.display.set_mode(
-                    event.size, self.pygame.RESIZABLE
-                )
                 self._update_layout()
             if event.type == self.pygame.KEYDOWN:
                 if event.key in (self.pygame.K_ESCAPE, self.pygame.K_q):
@@ -199,6 +197,9 @@ class VirtualMatrix:
                 ):
                     self.start_time = 0
 
+    def close(self):
+        self.pygame.quit()
+
     def reset_timer(self):
         self.start_time = led_time.get_start_time()
 
@@ -216,6 +217,8 @@ class VirtualMatrix:
 
     def image(self, img):
         rgb_image = img.convert("RGB")
+        if rgb_image.size != (pixel_width, pixel_height):
+            rgb_image = rgb_image.resize((pixel_width, pixel_height), Image.NEAREST)
         self.frame = np.array(rgb_image)
 
     def show(self):
@@ -225,10 +228,10 @@ class VirtualMatrix:
         enhanced = led_image.enhance(self.frame, color, contrast)
         scaled = np.repeat(np.repeat(enhanced, cell, axis=0), cell, axis=1)
         if self.layout["dot_mask"] is not None:
-            scaled = scaled * self.layout["dot_mask"]
+            scaled *= self.layout["dot_mask"]
 
         surface = self.pygame.image.frombuffer(
-            scaled.tobytes(),
+            scaled,
             (self.layout["draw_w"], self.layout["draw_h"]),
             "RGB",
         )
