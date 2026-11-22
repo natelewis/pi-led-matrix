@@ -11,51 +11,47 @@ USAGE = (
 
 
 def run(matrix, config):
-    """scroll large marquee text"""  # remove loader arg
+    """scroll large marquee text"""
     if not config["effect"]["messages"]:
         print(USAGE)
         sys.exit()
 
-    messages = []
-    for m in config["effect"]["messages"]:
-        messages.append(
-            [
-                m["left"] + config["pixel_width"],
-                m["right"],
-                m["r"],
-                m["g"],
-                m["b"],
-                m["message"],
-                m["font"],
-            ]
-        )
+    default_font_size = max(8, round(config["pixel_height"] * 0.55))
+    step = max(1, config["pixel_width"] // 60)
 
-    original_messages = messages.copy()
+    messages = [
+        [
+            int(item["left"]) + config["pixel_width"],
+            int(item["right"]),
+            (int(item["r"]), int(item["g"]), int(item["b"])),
+            item["message"],
+            item["font"],
+            int(item.get("font_size", default_font_size)),
+        ]
+        for item in config["effect"]["messages"]
+    ]
+
+    original_messages = [msg.copy() for msg in messages]
     reset_in_progress = False
-
-    def display_text(x, y, text, font_color, font):
-        matrix.text(text, (x, y), 16, font_color, font)
 
     while matrix.ready():
         matrix.reset()
-        for idx, message in enumerate(messages):
-            x, y, r, g, b, text, font = message
-            x = int(x)
-            y = int(y)
-            r = int(r)
-            g = int(g)
-            b = int(b)
-            x = x - 1
-            display_text(x, y, text, (r, g, b), font)
-            messages[idx] = [x, y, r, g, b, text, font]
+        for message in messages:
+            message[0] -= step
+            matrix.text(
+                message[3],
+                (message[0], message[1]),
+                message[5],
+                message[2],
+                message[4],
+            )
 
         # skip frames that have no pixels lit up
         if not np.all(matrix.frame == 0):
             matrix.show()
             matrix.delay(DELAY)
             reset_in_progress = False
-        else:
-            if not reset_in_progress:
-                # prevent an endless loop -- wait till we see things again before resetting again
-                reset_in_progress = True
-                messages = original_messages.copy()
+        elif not reset_in_progress:
+            # prevent an endless loop -- wait till we see things again before resetting again
+            reset_in_progress = True
+            messages = [msg.copy() for msg in original_messages]
