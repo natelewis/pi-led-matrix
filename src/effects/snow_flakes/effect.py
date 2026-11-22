@@ -1,9 +1,6 @@
 import random
 from operator import itemgetter
 
-# max flakes on the matrix
-SNOW_FLAKE_COUNT = 20
-
 # 1 in x chance of falling when reset to top
 RANDOM_DELAY = 2
 
@@ -30,56 +27,65 @@ FLAKE_2 = [
 ]
 
 
+def scale_sprite(sprite, scale):
+    """scale a 2D sprite array by an integer factor"""
+    if scale <= 1:
+        return sprite
+    return [
+        [cell for cell in row for _ in range(scale)]
+        for row in sprite
+        for _ in range(scale)
+    ]
+
+
+def is_overlapping(x, snow_flakes, flake_height):
+    """check if a new flake at x overlaps an existing flake near the top"""
+    spacing = flake_height * SNOW_FLAKE_DISTANCE
+    for flake in snow_flakes:
+        if (
+            -flake_height < flake["y"] < flake_height
+            and flake["x"] - spacing < x < flake["x"] + spacing
+        ):
+            return True
+    return False
+
+
 def run(matrix, config):
     """falling snow"""
-    flake_height = len(FLAKE_1)
-    snow_flakes = [{"y": -flake_height, "x": 0}] * SNOW_FLAKE_COUNT
+    width = config["pixel_width"]
+    height = config["pixel_height"]
+    scale = max(1, min(width, height) // 36)
+    flake_1 = scale_sprite(FLAKE_1, scale)
+    flake_2 = scale_sprite(FLAKE_2, scale)
+    flake_height = len(flake_1)
+    flake_count = max(10, round(width * height / (flake_height * flake_height * 3.6)))
+    snow_flakes = [{"y": -flake_height, "x": 0} for _ in range(flake_count)]
+
     while matrix.ready():
         matrix.reset()
-        for idx, _ in enumerate(snow_flakes):
-            x, y = itemgetter("x", "y")(snow_flakes[idx])
+        for idx, entry in enumerate(snow_flakes):
+            x, y = itemgetter("x", "y")(entry)
 
-            # if fell to the bottom reset to the top
-            if y > config["pixel_height"]:
+            if y > height:
                 y = -flake_height
 
-            # move it down if it is falling
             if y > -flake_height:
-                y = y + 1
+                y = y + scale
 
-            # reset it to the top at random if ready
             if y == -flake_height:
-                # random x position where the position might be almost off screen on either side
-                x = int(
-                    random.random() * (config["pixel_width"] + flake_height)
-                    - flake_height
-                )
-                if int(random.random() * RANDOM_DELAY) == 0:
-
-                    # anti overlapping
-                    overlapping = False
-                    for flake in snow_flakes:
-                        # find flakes that could overlap with a buffer above that is the
-                        # size of the flake
-                        if (
-                            flake["y"] > -flake_height
-                            and flake["y"] < flake_height
-                            and x > flake["x"] - flake_height * SNOW_FLAKE_DISTANCE
-                            and x < flake["x"] + flake_height * SNOW_FLAKE_DISTANCE
-                        ):
-                            overlapping = True
-
-                    if not overlapping:
-                        y = -flake_height + 1
+                x = random.randint(-flake_height + 1, width - 1)
+                if random.randrange(RANDOM_DELAY) == 0 and not is_overlapping(
+                    x, snow_flakes, flake_height
+                ):
+                    y = -flake_height + 1
 
             snow_flakes[idx] = {"x": x, "y": y}
             if y > -flake_height:
-                # shimmer effect value by having random brightness
                 brightness = random.randint(50, 255)
                 spin_axis = random.randint(0, 1) if SPIN_FLAKE else x
-                flake = FLAKE_1 if (spin_axis % 2) == 0 else FLAKE_2
+                sprite = flake_1 if (spin_axis % 2) == 0 else flake_2
                 matrix.sprite(
-                    flake, (x, y), {"x": (brightness, brightness, brightness)}
+                    sprite, (x, y), {"x": (brightness, brightness, brightness)}
                 )
 
         matrix.show()
