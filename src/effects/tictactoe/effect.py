@@ -12,165 +12,140 @@
 
 import random
 
+WIN_LINES = [
+    (0, 1, 2),
+    (3, 4, 5),
+    (6, 7, 8),
+    (0, 3, 6),
+    (1, 4, 7),
+    (2, 5, 8),
+    (0, 4, 8),
+    (6, 4, 2),
+]
 
-#
-# ./run.sh tictactoe
-#
+
+def build_layout(width, height):
+    """compute centered board geometry scaled to the matrix"""
+    x_mid = width // 2
+    y_mid = height // 2
+    cell = max(4, (min(width, height) - 2) // 3)
+    half_board = (cell * 3) // 2
+    squares = [
+        (x_mid + col * cell, y_mid + row * cell)
+        for row in (-1, 0, 1)
+        for col in (-1, 0, 1)
+    ]
+    return {
+        "x_mid": x_mid,
+        "y_mid": y_mid,
+        "cell": cell,
+        "half_board": half_board,
+        "squares": squares,
+        "o_radius": max(2, int(cell * 0.32)),
+        "x_half": max(2, int(cell * 0.28)),
+        "thickness": max(1, cell // 10),
+    }
+
+
+def draw_board(matrix, layout, color):
+    """draw centered 3x3 tic tac toe grid"""
+    x_mid = layout["x_mid"]
+    y_mid = layout["y_mid"]
+    half_cell = layout["cell"] // 2
+    half_board = layout["half_board"]
+    thickness = layout["thickness"]
+
+    matrix.line(
+        (x_mid - half_cell, y_mid - half_board),
+        (x_mid - half_cell, y_mid + half_board),
+        color,
+        thickness,
+    )
+    matrix.line(
+        (x_mid + half_cell, y_mid - half_board),
+        (x_mid + half_cell, y_mid + half_board),
+        color,
+        thickness,
+    )
+    matrix.line(
+        (x_mid - half_board, y_mid - half_cell),
+        (x_mid + half_board, y_mid - half_cell),
+        color,
+        thickness,
+    )
+    matrix.line(
+        (x_mid - half_board, y_mid + half_cell),
+        (x_mid + half_board, y_mid + half_cell),
+        color,
+        thickness,
+    )
+
+
+def draw_mark(matrix, layout, coord, player, color):
+    """draw X or O at a square center"""
+    x, y = coord
+    thickness = layout["thickness"]
+    if player == "X":
+        half = layout["x_half"]
+        matrix.line((x - half, y - half), (x + half, y + half), color, thickness)
+        matrix.line((x - half, y + half), (x + half, y - half), color, thickness)
+    elif player == "O":
+        matrix.circle((x, y), layout["o_radius"], color, thickness)
+
+
 def run(matrix, config):
     """tic tac toe"""
-
-    grid_color = matrix.color("white")
-    x_color = matrix.color("white")
-    o_color = matrix.color("white")
-    win_color = matrix.color("red")
-    background_color = matrix.color("black")
-
-    y_min = 0
-    x_max = config["pixel_width"]
-    y_max = config["pixel_height"]
-    x_mid = round(x_max / 2)
-    y_mid = round(y_max / 2)
-
-    # Blocks in the grid
-    upper_left = (x_mid - 10, y_mid - 10)
-    upper_mid = (x_mid, y_mid - 10)
-    upper_right = (x_mid + 10, y_mid - 10)
-    mid_left = (x_mid - 10, y_mid)
-    mid_mid = (x_mid, y_mid)
-    mid_right = (x_mid + 10, y_mid)
-    lower_left = (x_mid - 10, y_mid + 10)
-    lower_mid = (x_mid, y_mid + 10)
-    lower_right = (x_mid + 10, y_mid + 10)
-
-    all_squares = [
-        upper_left,
-        upper_mid,
-        upper_right,
-        mid_left,
-        mid_mid,
-        mid_right,
-        lower_left,
-        lower_mid,
-        lower_right,
-    ]
-
-    win_states = [
-        [upper_left, upper_mid, upper_right],
-        [mid_left, mid_mid, mid_right],
-        [lower_left, lower_mid, lower_right],
-        [upper_left, mid_left, lower_left],
-        [upper_mid, mid_mid, lower_mid],
-        [upper_right, mid_right, lower_right],
-        [upper_left, mid_mid, lower_right],
-        [lower_left, mid_mid, upper_right],
-    ]
-
-    player_grid = {}
-    for block in all_squares:
-        player_grid[block] = None
-
-    left_line = x_mid - 5
-    right_line = x_mid + 5
-    top_line = y_mid - 5
-    bottom_line = y_mid + 5
-
+    colors = {
+        "grid": matrix.color("white"),
+        "mark": matrix.color("white"),
+        "win": matrix.color("red"),
+        "bg": matrix.color("black"),
+    }
+    layout = build_layout(config["pixel_width"], config["pixel_height"])
+    board = [None] * 9
     active_player = "X"
 
-    def clear_grid():
-        for block in all_squares:
-            player_grid[block] = None
-
-    def draw_board():
-        matrix.line((left_line, y_min), (left_line, y_max), grid_color, 1)
-        matrix.line((right_line, y_min), (right_line, y_max), grid_color, 1)
-        matrix.line((x_mid - 15, top_line), (x_mid + 15, top_line), grid_color, 1)
-        matrix.line((x_mid - 15, bottom_line), (x_mid + 15, bottom_line), grid_color, 1)
-
-    def draw_oh(coord, color=o_color):
-        x, y = coord
-        matrix.circle((x, y), 3, color, 1)
-
-    def draw_ex(coord, color=x_color):
-        x, y = coord
-        matrix.line((x - 2, y - 2), (x + 2, y + 2), color, 1)
-        matrix.line((x - 2, y + 2), (x + 2, y - 2), color, 1)
-
-    def is_full():
-        if None not in player_grid.values():
-            return True
-        else:
-            return False
-
-    def draw_players():
-        for block, player in player_grid.items():
-            if player == "X":
-                draw_ex(block)
-            elif player == "O":
-                draw_oh(block)
-
-    def player_move():
-        open_blocks = []
-        for block, player in player_grid.items():
-            if player == None:
-                open_blocks.append(block)
-        return random.choice(open_blocks)
-
-    def celebrate_winner(player, blocks):
+    def celebrate_winner(player, indices):
         for _ in range(5):
-            for coord in blocks:
-                if player == "X":
-                    draw_ex(coord, background_color)
-                else:
-                    draw_oh(coord, background_color)
+            for idx in indices:
+                draw_mark(matrix, layout, layout["squares"][idx], player, colors["bg"])
             matrix.show()
             matrix.delay(500)
-            for coord in blocks:
-                if player == "X":
-                    draw_ex(coord, win_color)
-                else:
-                    draw_oh(coord, win_color)
+            for idx in indices:
+                draw_mark(matrix, layout, layout["squares"][idx], player, colors["win"])
             matrix.show()
             matrix.delay(500)
 
-    def is_winner(player):
-        for blocks in win_states:
-            if (
-                player_grid[blocks[0]] == active_player
-                and player_grid[blocks[1]] == active_player
-                and player_grid[blocks[2]] == active_player
-            ):
-                celebrate_winner(player, blocks)
+    def find_winner(player):
+        for line in WIN_LINES:
+            if all(board[idx] == player for idx in line):
+                celebrate_winner(player, line)
                 return True
         return False
 
-    clear_grid()
-
     while matrix.ready():
         matrix.reset()
+        draw_board(matrix, layout, colors["grid"])
 
-        draw_board()
+        open_indices = [idx for idx, val in enumerate(board) if val is None]
+        board[random.choice(open_indices)] = active_player
 
-        # Player makes a move
-        # TODO: Use the win_states to help decide the next move.
-        player_grid[player_move()] = active_player
-
-        draw_players()
+        for idx, player in enumerate(board):
+            if player is not None:
+                draw_mark(
+                    matrix, layout, layout["squares"][idx], player, colors["mark"]
+                )
 
         matrix.show()
         matrix.delay(1000)
 
-        if is_winner(active_player):
+        if find_winner(active_player):
             print(f"Player {active_player} wins!")
             matrix.delay(3000)
-            clear_grid()
-
-        if is_full():
+            board = [None] * 9
+        elif None not in board:
             print("No winner!?!")
             matrix.delay(3000)
-            clear_grid()
+            board = [None] * 9
 
-        # Next player
-        if active_player == "X":
-            active_player = "O"
-        else:
-            active_player = "X"
+        active_player = "O" if active_player == "X" else "X"
