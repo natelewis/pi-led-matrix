@@ -733,60 +733,63 @@ octopus = [
 ]
 
 
+def build_formation(max_x, max_y):
+    """compute formation columns and march bounds for the matrix size"""
+    col_spacing = 24
+    row_spacing = 20
+    cols = max(1, (max_x - 10) // col_spacing)
+    formation_w = (cols - 1) * col_spacing + len(crab[0])
+    return {
+        "cols": cols,
+        "col_spacing": col_spacing,
+        "row_spacing": row_spacing,
+        "formation_h": row_spacing * 2 + len(octopus),
+        "x_max": max(0, max_x - formation_w),
+        "y_step": max(2, max_y // 12),
+    }
+
+
 def run(matrix, config):
     """space invaders"""
-
-    # Change the color of the aliens and/or background if too intense on LED screen
     alien_color = matrix.color("white")
     background_color = matrix.color("black")
-
-    # This color key applies to all aliens.  Switch colors to animate sprite.
-    squid_color_key = [
+    color_key = [
         {"a": alien_color, "b": alien_color, "c": background_color},
         {"a": alien_color, "b": background_color, "c": alien_color},
     ]
 
+    max_y = config["pixel_height"]
+    grid = build_formation(config["pixel_width"], max_y)
     animate_frame = 0
     x = 0
-    init_y = -50
-    max_y = config["pixel_height"]
-    y = init_y
+    y = 2
     direction = 1
 
     while matrix.ready():
         matrix.reset(background_color)
 
-        # draw squids
-        matrix.sprite(squid, (x + 2 - 24, y), squid_color_key[animate_frame])
-        matrix.sprite(squid, (x + 2, y), squid_color_key[animate_frame])
-        matrix.sprite(squid, (x + 2 + 24, y), squid_color_key[animate_frame])
-
-        # Draw crabs
-        matrix.sprite(crab, (x - 24, y + 20), squid_color_key[animate_frame])
-        matrix.sprite(crab, (x, y + 20), squid_color_key[animate_frame])
-        matrix.sprite(crab, (x + 24, y + 20), squid_color_key[animate_frame])
-
-        # Draw octopuses
-        matrix.sprite(octopus, (x - 24, y + 40), squid_color_key[animate_frame])
-        matrix.sprite(octopus, (x, y + 40), squid_color_key[animate_frame])
-        matrix.sprite(octopus, (x + 24, y + 40), squid_color_key[animate_frame])
+        for col in range(grid["cols"]):
+            col_x = x + col * grid["col_spacing"]
+            matrix.sprite(squid, (col_x + 2, y), color_key[animate_frame])
+            matrix.sprite(
+                crab, (col_x, y + grid["row_spacing"]), color_key[animate_frame]
+            )
+            matrix.sprite(
+                octopus, (col_x, y + grid["row_spacing"] * 2), color_key[animate_frame]
+            )
 
         matrix.show()
-
         matrix.delay(10)
+        animate_frame = 1 - animate_frame
 
-        # change color of legs, alternating between black and white gives illusion of animation
-        if animate_frame == 0:
-            animate_frame = 1
+        if grid["x_max"] > 0:
+            x += direction
+            if x >= grid["x_max"] or x <= 0:
+                x = max(0, min(grid["x_max"], x))
+                y += grid["y_step"]
+                direction *= -1
         else:
-            animate_frame = 0
+            y += grid["y_step"]
 
-        # When middle aliens reach end of screen, drop and change direction
-        x += direction
-        if x >= 40 or x <= 0:
-            y += 5
-            direction *= -1
-
-        # Start all over again from the virtual top when top alient reaches the bottom
         if y >= max_y:
-            y = init_y
+            y = -grid["formation_h"]
