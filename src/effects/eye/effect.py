@@ -4,15 +4,25 @@
 #
 # Brown Eyes: 45 percent
 # Blue Eyes: 28 percent
-# Hazel Eyes: 18 percent (Note: Hazel eyes consist of shades of brown and green.  Sometimes called forestgreen)
+# Hazel Eyes: 18 percent (shades of brown and green, sometimes called forestgreen)
 # Green Eyes: 9 percent
 #
 
 import random
 
 
-def run(matrix, _):
+def run(matrix, config):
     """eyes looking at you"""
+    width = config["pixel_width"]
+    height = config["pixel_height"]
+    eye_y = height // 2
+    eye_positions = [width // 4, (width * 3) // 4]
+
+    eye_radius = max(3, min(int(height * 0.4), int(width * 0.2)))
+    iris_radius = max(2, round(eye_radius * 5 / 12))
+    pupil_radius = max(1, round(eye_radius * 2 / 12))
+    look = max(1, round(eye_radius * 5 / 12))
+
     eye_color = random.choices(
         [
             matrix.color("brown"),
@@ -27,21 +37,26 @@ def run(matrix, _):
         x_dir, y_dir = random.choices(
             [
                 (0, 0),
-                (5, 0),
-                (-5, 0),
-                (0, 5),
-                (0, -5),
-                (5, -5),
-                (5, 5),
-                (-5, 5),
-                (-5, -5),
+                (look, 0),
+                (-look, 0),
+                (0, look),
+                (0, -look),
+                (look, -look),
+                (look, look),
+                (-look, look),
+                (-look, -look),
             ],
             weights=[60, 5, 5, 5, 5, 5, 5, 5, 5],
         )[0]
         matrix.reset()
-        for eye in [15, 45]:
-            matrix.circle((eye, 15), 12, matrix.color("white"), -1)
-            matrix.circle((eye + x_dir, 15 + y_dir), 5, eye_color, -1)
-            matrix.circle((eye + x_dir, 15 + y_dir), 2, matrix.color("black"), -1)
+        for eye_x in eye_positions:
+            matrix.circle((eye_x, eye_y), eye_radius, matrix.color("white"), -1)
+            matrix.circle((eye_x + x_dir, eye_y + y_dir), iris_radius, eye_color, -1)
+            matrix.circle(
+                (eye_x + x_dir, eye_y + y_dir),
+                pupil_radius,
+                matrix.color("black"),
+                -1,
+            )
         matrix.show()
         matrix.delay(3000)
