@@ -51,7 +51,7 @@ If your Raspberry Pi displays the matrix fullscreen on an attached HDMI screen v
 ```ini
 [Unit]
 Description=Raspberry Pi LED Matrix Studio Web Server
-After=network-online.target graphical.target
+After=network-online.target
 Wants=network-online.target
 
 [Service]
