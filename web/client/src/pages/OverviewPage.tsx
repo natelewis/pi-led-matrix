@@ -16,7 +16,7 @@ import {
   SectionHeader,
 } from '@/components/ui';
 import { MatrixPreviewGrid } from '@/components/config/MatrixPreviewGrid';
-import { formatPlaylistItemLabel } from '@/utils/playlistLabels';
+import { PlaylistEntryLabel } from '@/components/config/PlaylistEntryLabel';
 import type { EffectMeta, MatrixConfig, NavSectionId } from '@/types/matrix';
 
 interface OverviewPageProps {
@@ -164,10 +164,9 @@ export function OverviewPage({
                   <Badge
                     key={`${entry.effect}-${idx}`}
                     tone={entry.config ? 'emerald' : 'neutral'}
+                    className="max-w-[220px]"
                   >
-                    {entry.effect === 'video' || entry.effect === 'image'
-                      ? formatPlaylistItemLabel(entry)
-                      : entry.effect}
+                    <PlaylistEntryLabel item={entry} compact />
                   </Badge>
                 ))}
                 {config.playlist.length > 18 && (

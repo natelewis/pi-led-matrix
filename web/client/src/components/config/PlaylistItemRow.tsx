@@ -11,8 +11,9 @@ import {
   Trash2,
 } from 'lucide-react';
 import { Badge, type BadgeTone } from '@/components/ui';
+import { PlaylistEntryLabel } from '@/components/config/PlaylistEntryLabel';
 import { buildEffectRunCommand } from '@/utils/cliCommand';
-import { formatPlaylistItemLabel } from '@/utils/playlistLabels';
+import { extractMarqueeText } from '@/utils/playlistLabels';
 import type { EffectCategory, EffectMeta, PlaylistItem } from '@/types/matrix';
 
 const CATEGORY_TONES: Record<EffectCategory, BadgeTone> = {
@@ -73,13 +74,18 @@ export function PlaylistItemRow({
   const needsConfig =
     meta && meta.configSchema !== 'none' && !hasConfig;
   const runCommand = buildEffectRunCommand(item);
-  const displayLabel = formatPlaylistItemLabel(item, meta);
+  const marqueeText = extractMarqueeText(item);
   const configuredFile =
     (item.effect === 'video' || item.effect === 'image') &&
     typeof item.config?.file === 'string' &&
     item.config.file.trim().length > 0
       ? item.config.file
       : null;
+  const hasCustomTitle = Boolean(configuredFile || marqueeText);
+  const marqueeLayerCount =
+    marqueeText && Array.isArray(item.config?.messages)
+      ? item.config.messages.length
+      : 0;
 
   const handleCopyCommand = () => {
     onCopyCommand(runCommand);
@@ -115,31 +121,40 @@ export function PlaylistItemRow({
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <span
-            className="truncate text-sm font-medium text-slate-100"
-            title={configuredFile ?? displayLabel}
-          >
-            {displayLabel}
-          </span>
-          {!configuredFile && (
-            <span className="font-mono text-[11px] text-slate-500">{item.effect}</span>
+        <div className="flex min-w-0 items-center gap-2">
+          <PlaylistEntryLabel
+            item={item}
+            meta={meta}
+            className="text-sm font-medium text-slate-100"
+          />
+          {!hasCustomTitle && (
+            <span className="shrink-0 font-mono text-[11px] text-slate-500">
+              {item.effect}
+            </span>
           )}
-          {isPlaying && (
-            <Badge tone="emerald" className="animate-pulse">
-              Playing
-            </Badge>
-          )}
-          {meta && (
-            <Badge tone={CATEGORY_TONES[meta.category]}>{meta.category}</Badge>
-          )}
-          {hasConfig && <Badge tone="emerald">Configured</Badge>}
-          {needsConfig && <Badge tone="amber">Needs config</Badge>}
+          <div className="flex shrink-0 items-center gap-1.5">
+            {isPlaying && (
+              <Badge tone="emerald" className="animate-pulse">
+                Playing
+              </Badge>
+            )}
+            {meta && (
+              <Badge tone={CATEGORY_TONES[meta.category]}>{meta.category}</Badge>
+            )}
+            {hasConfig && (
+              <Badge tone="emerald" className="hidden sm:inline-flex">
+                Configured
+              </Badge>
+            )}
+            {needsConfig && <Badge tone="amber">Needs config</Badge>}
+          </div>
         </div>
-        {(configuredFile || meta?.description) && (
+        {(configuredFile || marqueeText || meta?.description) && (
           <p className="mt-0.5 truncate text-xs text-slate-400">
             {configuredFile ? (
               <span className="font-mono text-[11px] text-slate-400">{configuredFile}</span>
+            ) : marqueeText ? (
+              `${marqueeLayerCount} ${marqueeLayerCount === 1 ? 'message layer' : 'message layers'}`
             ) : (
               meta?.description
             )}

@@ -20,8 +20,30 @@ export function extractMediaShortName(filePath: string, maxLength = 32): string 
 }
 
 /**
+ * Extracts the combined single-line text from a configured marquee effect.
+ * Returns null if no non-empty messages are configured.
+ */
+export function extractMarqueeText(item: PlaylistItem): string | null {
+  if (item.effect !== 'marquee') return null;
+  const rawMessages = item.config?.messages;
+  if (!Array.isArray(rawMessages)) return null;
+
+  const parts = rawMessages
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') return '';
+      const msg = (entry as Record<string, unknown>).message;
+      return typeof msg === 'string' ? msg.replace(/\s+/g, ' ').trim() : '';
+    })
+    .filter(Boolean);
+
+  if (parts.length === 0) return null;
+  return parts.join(' ');
+}
+
+/**
  * Returns the human-readable playlist title for an entry.
- * For configured `video` and `image` entries, formats as `video: <name>` / `image: <name>`.
+ * - Configured `video` / `image`: `video: <name>` / `image: <name>`
+ * - Configured `marquee`: `marquee: "<text>"`
  */
 export function formatPlaylistItemLabel(
   item: PlaylistItem,
@@ -34,6 +56,13 @@ export function formatPlaylistItemLabel(
       if (shortName) {
         return `${item.effect}: ${shortName}`;
       }
+    }
+  }
+
+  if (item.effect === 'marquee') {
+    const text = extractMarqueeText(item);
+    if (text) {
+      return `marquee: "${text}"`;
     }
   }
 

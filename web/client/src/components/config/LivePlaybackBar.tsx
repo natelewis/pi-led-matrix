@@ -1,6 +1,6 @@
 import { Play, Radio, SkipForward, Square } from 'lucide-react';
 import { Badge, Button } from '@/components/ui';
-import { formatPlaylistItemLabel } from '@/utils/playlistLabels';
+import { PlaylistEntryLabel } from '@/components/config/PlaylistEntryLabel';
 import type { EffectMeta, PlaybackStatus } from '@/types/matrix';
 
 export interface LivePlaybackBarProps {
@@ -20,14 +20,11 @@ export function LivePlaybackBar({
   onStop,
   onNext,
 }: LivePlaybackBarProps) {
-  const nowPlayingLabel = playback.currentEffect
-    ? formatPlaylistItemLabel(
-        {
-          effect: playback.currentEffect,
-          config: playback.currentConfig ?? undefined,
-        },
-        effectMap.get(playback.currentEffect)
-      )
+  const currentItem = playback.currentEffect
+    ? {
+        effect: playback.currentEffect,
+        config: playback.currentConfig ?? undefined,
+      }
     : null;
 
   const delay = playback.playlistDelay ?? 0;
@@ -60,9 +57,17 @@ export function LivePlaybackBar({
           {playback.running ? (
             <div className="flex min-w-0 items-center gap-2.5">
               <Radio className="h-3.5 w-3.5 shrink-0 text-cyan-400" />
-              <span className="truncate text-xs font-medium text-white">
-                {nowPlayingLabel || 'Starting playlist...'}
-              </span>
+              {currentItem ? (
+                <PlaylistEntryLabel
+                  item={currentItem}
+                  meta={effectMap.get(currentItem.effect)}
+                  className="text-xs font-medium text-white"
+                />
+              ) : (
+                <span className="truncate text-xs font-medium text-white">
+                  Starting playlist...
+                </span>
+              )}
               {playback.currentIndex !== null && playback.playlistLength !== null && (
                 <Badge tone="neutral" className="font-mono text-[10px]">
                   #{playback.currentIndex + 1}/{playback.playlistLength}
