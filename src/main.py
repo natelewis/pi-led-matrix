@@ -220,24 +220,37 @@ class VirtualMatrix:
         self.pygame.display.set_caption("LED Matrix")
         self._update_layout()
 
+    @staticmethod
+    def _build_dot_mask(draw_w, draw_h):
+        step_x = draw_w / pixel_width
+        step_y = draw_h / pixel_height
+        x_idx = np.arange(draw_w, dtype=np.int64)
+        y_idx = np.arange(draw_h, dtype=np.int64)
+        dx = (x_idx + 0.5) - (((x_idx * pixel_width) // draw_w) + 0.5) * step_x
+        dy = (y_idx + 0.5) - (((y_idx * pixel_height) // draw_h) + 0.5) * step_y
+        radius = min(step_x, step_y) * 0.42
+        mask = (
+            ((dx[np.newaxis, :] ** 2 + dy[:, np.newaxis] ** 2) <= radius * radius)
+            .astype(np.uint8)
+            * 255
+        )
+        return np.repeat(mask[:, :, np.newaxis], 3, axis=2)
+
     def _update_layout(self):
-        win_w, win_h = self.screen.get_size()
-        cell = max(1, min(win_w // pixel_width, win_h // pixel_height))
-        draw_w = pixel_width * cell
-        draw_h = pixel_height * cell
+        raw_w, raw_h = self.screen.get_size()
+        win_w = max(1, raw_w)
+        win_h = max(1, raw_h)
+        scale = min(win_w / pixel_width, win_h / pixel_height)
+        draw_w = max(1, min(win_w, int(round(pixel_width * scale))))
+        draw_h = max(1, min(win_h, int(round(pixel_height * scale))))
 
         dot_mask = None
-        if self.led_dots and cell >= 4:
-            row_grid, col_grid = np.ogrid[:cell, :cell]
-            center = (cell - 1) / 2.0
-            radius = cell * 0.42
-            dot = (
-                ((col_grid - center) ** 2 + (row_grid - center) ** 2) <= radius * radius
-            ).astype(np.uint8)
-            dot_mask = np.tile(dot, (pixel_height, pixel_width))[:, :, np.newaxis]
+        if self.led_dots and scale >= 4:
+            dot_mask = self._build_dot_mask(draw_w, draw_h)
 
         self.layout = {
-            "cell": cell,
+            "win_w": raw_w,
+            "win_h": raw_h,
             "draw_w": draw_w,
             "draw_h": draw_h,
             "offset_x": (win_w - draw_w) // 2,
@@ -246,12 +259,21 @@ class VirtualMatrix:
         }
 
     def _poll_events(self):
+        resize_events = (self.pygame.VIDEORESIZE,)
+        win_size_changed = getattr(self.pygame, "WINDOWSIZECHANGED", None)
+        if win_size_changed is not None:
+            resize_events = (self.pygame.VIDEORESIZE, win_size_changed)
+
         for event in self.pygame.event.get():
             if event.type == self.pygame.QUIT:
                 self.pygame.quit()
                 sys.exit(0)
-            if event.type == self.pygame.VIDEORESIZE and not self.fullscreen:
-                self._update_layout()
+            if event.type in resize_events:
+                if self.screen.get_size() != (
+                    self.layout.get("win_w"),
+                    self.layout.get("win_h"),
+                ):
+                    self._update_layout()
             if event.type == self.pygame.KEYDOWN:
                 if event.key in (self.pygame.K_ESCAPE, self.pygame.K_q):
                     self.pygame.quit()
@@ -311,11 +333,14 @@ class VirtualMatrix:
         elif delay_ms > 0:
             self.delay(delay_ms)
 
-        cell = self.layout["cell"]
         enhanced = led_image.enhance(self.frame, color, contrast)
-        scaled = np.repeat(np.repeat(enhanced, cell, axis=0), cell, axis=1)
+        scaled = cv2.resize(
+            enhanced,
+            (self.layout["draw_w"], self.layout["draw_h"]),
+            interpolation=cv2.INTER_NEAREST,
+        )
         if self.layout["dot_mask"] is not None:
-            scaled *= self.layout["dot_mask"]
+            cv2.bitwise_and(scaled, self.layout["dot_mask"], dst=scaled)
 
         surface = self.pygame.image.frombuffer(
             scaled,
