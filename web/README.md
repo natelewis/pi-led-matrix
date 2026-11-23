@@ -54,7 +54,7 @@ Then open `http://localhost:8080` (or `http://<raspberry-pi-ip>:8080` on your LA
 make web-dev
 ```
 
-- React dev server: `http://localhost:5173` (proxies `/api/*` to `:8080`)
+- React dev server: `http://localhost:5188` (proxies `/api/*` to `:8080`)
 - Python API server: `http://127.0.0.1:8080` (auto-reloads on `web/server/*.py` edits)
 
 ### Run Backend Tests
@@ -69,6 +69,7 @@ make web-test
 | --- | --- | --- |
 | `LED_MATRIX_WEB_HOST` | `0.0.0.0` | Bind address for the web server |
 | `LED_MATRIX_WEB_PORT` | `8080` | Port for the web server |
+| `LED_MATRIX_DEV_PORT` | `5188` | Port for the Vite dev server (`make web-dev`) |
 | `LED_MATRIX_PASSWORD` | *(unset)* | Optional fixed admin password (overrides `web/.auth.json`) |
 
 ## Architecture & Extending
