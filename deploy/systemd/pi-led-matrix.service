@@ -1,0 +1,18 @@
+[Unit]
+Description=Raspberry Pi LED Matrix Playlist Runner
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=pi
+UMask=0002
+WorkingDirectory=/home/pi/pi-led-matrix
+ExecStart=/home/pi/pi-led-matrix/.venv/bin/python /home/pi/pi-led-matrix/src/load_playlist.py
+Restart=on-failure
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

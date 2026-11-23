@@ -1,21 +1,29 @@
 import { useState, type ReactNode } from 'react';
 import {
+  ArrowDownToLine,
   Grid3X3,
   LogOut,
   Menu,
   RotateCcw,
   Save,
+  Server,
   X,
 } from 'lucide-react';
 import { Badge, Button } from '@/components/ui';
+import { TargetSwitcher } from '@/components/config/TargetSwitcher';
 import { NAV_ITEMS } from './navItems';
-import type { NavSectionId } from '@/types/matrix';
+import type { MatrixTarget, NavSectionId } from '@/types/matrix';
 
 export interface AppShellProps {
   activeSection: NavSectionId;
   onNavigate: (section: NavSectionId) => void;
+  targets: MatrixTarget[];
+  activeTarget: MatrixTarget;
+  switchingTarget?: boolean;
+  onSelectTarget: (targetId: string) => void;
   source: 'custom' | 'default';
   playlistCount: number;
+  updatesAvailable?: number;
   dimensionsLabel: string;
   isDirty: boolean;
   saving: boolean;
@@ -29,8 +37,13 @@ export interface AppShellProps {
 export function AppShell({
   activeSection,
   onNavigate,
+  targets,
+  activeTarget,
+  switchingTarget = false,
+  onSelectTarget,
   source,
   playlistCount,
+  updatesAvailable = 0,
   dimensionsLabel,
   isDirty,
   saving,
@@ -86,6 +99,15 @@ export function AppShell({
                 {playlistCount}
               </span>
             )}
+            {item.id === 'devices' && updatesAvailable > 0 && (
+              <span
+                className="inline-flex items-center gap-0.5 rounded-full border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-amber-300"
+                title={`${updatesAvailable} git update${updatesAvailable === 1 ? '' : 's'} available on ${activeTarget.name}`}
+              >
+                <ArrowDownToLine className="h-2.5 w-2.5" />
+                {updatesAvailable}
+              </span>
+            )}
           </button>
         );
       })}
@@ -110,6 +132,18 @@ export function AppShell({
           </div>
         </div>
       </div>
+
+      {/* Active Target / Remote Pi Switcher */}
+      <TargetSwitcher
+        targets={targets}
+        activeTarget={activeTarget}
+        switching={switchingTarget}
+        onSelect={(id) => {
+          setMobileOpen(false);
+          onSelectTarget(id);
+        }}
+        onManageDevices={() => handleSelect('devices')}
+      />
 
       {/* Navigation */}
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-5">
@@ -175,10 +209,29 @@ export function AppShell({
             >
               <Menu className="h-5 w-5" />
             </button>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {!activeTarget.isLocal && (
+                <Badge tone="violet">
+                  <Server className="h-3 w-3" />
+                  Remote: {activeTarget.name}
+                </Badge>
+              )}
               <Badge tone={source === 'custom' ? 'emerald' : 'amber'}>
                 {source === 'custom' ? 'Custom config.json' : 'Default config'}
               </Badge>
+              {updatesAvailable > 0 && (
+                <button
+                  type="button"
+                  onClick={() => handleSelect('devices')}
+                  className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/15 px-2.5 py-0.5 text-[11px] font-medium text-amber-200 transition hover:bg-amber-500/25 cursor-pointer"
+                  title={`Open Devices & Remote to pull ${updatesAvailable} update${updatesAvailable === 1 ? '' : 's'} on ${activeTarget.name}`}
+                >
+                  <ArrowDownToLine className="h-3 w-3 text-amber-300" />
+                  <span>
+                    {updatesAvailable} update{updatesAvailable === 1 ? '' : 's'} available
+                  </span>
+                </button>
+              )}
               {isDirty && (
                 <Badge tone="cyan" className="animate-pulse">
                   Unsaved changes

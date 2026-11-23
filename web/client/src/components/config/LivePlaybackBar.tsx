@@ -6,6 +6,8 @@ import type { EffectMeta, PlaybackStatus } from '@/types/matrix';
 export interface LivePlaybackBarProps {
   playback: PlaybackStatus;
   effectMap: Map<string, EffectMeta>;
+  targetName?: string;
+  isRemote?: boolean;
   busy: boolean;
   onStart: () => void;
   onStop: () => void;
@@ -15,6 +17,8 @@ export interface LivePlaybackBarProps {
 export function LivePlaybackBar({
   playback,
   effectMap,
+  targetName = 'Local Machine',
+  isRemote = false,
   busy,
   onStart,
   onStop,
@@ -89,8 +93,8 @@ export function LivePlaybackBar({
             </div>
           ) : (
             <span className="truncate text-xs text-slate-400">
-              Local playlist idle — click Start to launch or run{' '}
-              <code className="text-slate-300">make playlist</code>
+              {isRemote ? `${targetName} playlist idle` : 'Local playlist idle'} — click Start to
+              launch or run <code className="text-slate-300">make playlist</code>
             </span>
           )}
         </div>

@@ -7,3 +7,4 @@ test.py
 local_*
 .venv
 config.json
+*.swp

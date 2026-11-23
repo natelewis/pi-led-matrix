@@ -132,5 +132,78 @@ export type NavSectionId =
   | 'playlist'
   | 'display'
   | 'virtual'
+  | 'devices'
   | 'json'
   | 'security';
+
+export interface MatrixTarget {
+  id: string;
+  name: string;
+  url: string | null;
+  isLocal: boolean;
+  hasSession: boolean;
+  createdAt: number | null;
+}
+
+export interface TargetsState {
+  activeTargetId: string;
+  targets: MatrixTarget[];
+}
+
+export interface TargetProbeResult {
+  reachable: boolean;
+  url: string;
+  initialized?: boolean;
+  authenticated?: boolean;
+  envManaged?: boolean;
+  error?: string;
+}
+
+export interface LiveFrameData {
+  width: number;
+  height: number;
+  rgbBytes: Uint8Array;
+  timestamp: number;
+}
+
+export interface GitStatusResponse {
+  isGitRepo: boolean;
+  branch: string | null;
+  detached: boolean;
+  commit: string | null;
+  commitMessage: string | null;
+  commitDate: string | null;
+  remoteUrl: string | null;
+  upstream: string | null;
+  dirty: boolean;
+  dirtyFiles: string[];
+  ahead: number | null;
+  behind: number | null;
+  fetchError: string | null;
+  canRestart?: boolean;
+}
+
+export interface GitRebuildStep {
+  name: string;
+  status: 'ok' | 'skipped' | 'failed';
+  detail: string;
+}
+
+export interface GitPullResponse {
+  updated: boolean;
+  beforeCommit: string;
+  afterCommit: string;
+  changedFiles: string[];
+  totalChangedFiles: number;
+  serverFilesChanged: boolean;
+  clientFilesChanged: boolean;
+  playbackFilesChanged: boolean;
+  pythonDepsChanged?: boolean;
+  nodeDepsChanged?: boolean;
+  rebuildSteps?: GitRebuildStep[];
+  rebuilt?: boolean;
+  rebuildFailed?: boolean;
+  output: string;
+  status: GitStatusResponse;
+  canRestart?: boolean;
+}

@@ -14,22 +14,26 @@ import os
 import posixpath
 import subprocess
 import sys
+import threading
 import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 from urllib.parse import parse_qs, urlparse
 
 from .auth import AuthManager
 from .config_store import ConfigStore, ConfigValidationError
 from .effects import discover_effects, discover_fonts
+from .git_ops import GitOperationError, GitRepoUpdater
 from .media import ImageMediaStore, VideoMediaStore
 from .playback import PlaybackController
 from .router import Router
+from .targets import RemoteRequestError, RemoteUnreachableError, TargetManager
 
 
 MAX_BODY_BYTES = 10_485_760  # 10 MiB
+LOCAL_ONLY_PREFIXES = ("/api/health", "/api/auth/", "/api/targets")
 
 
 def _reject_json_constant(token: str) -> Any:
@@ -45,7 +49,9 @@ class AppContext:
         *,
         static_dir: Optional[Path] = None,
         auth_file: Optional[Path] = None,
+        targets_file: Optional[Path] = None,
         env_password: Optional[str] = None,
+        restart_callback: Optional[Callable[[], None]] = None,
     ) -> None:
         self.repo_root = repo_root.resolve()
         self.web_root = self.repo_root / "web"
@@ -58,10 +64,15 @@ class AppContext:
             auth_file if auth_file is not None else self.web_root / ".auth.json",
             env_password=env_password,
         )
+        self.targets = TargetManager(
+            targets_file if targets_file is not None else self.web_root / ".targets.json"
+        )
         self.config_store = ConfigStore(self.repo_root)
         self.media_store = ImageMediaStore(self.repo_root)
         self.video_store = VideoMediaStore(self.repo_root)
         self.playback = PlaybackController(self.repo_root)
+        self.git_updater = GitRepoUpdater(self.repo_root)
+        self.restart_callback = restart_callback
         self.router = self._build_router()
 
     def _build_router(self) -> Router:
@@ -484,6 +495,200 @@ class AppContext:
             self.playback.notify_config_updated()
             req.send_json(self.playback.get_status())
 
+        @router.get("/api/playback/frame", require_auth=True)
+        def playback_frame(req: MatrixRequestHandler, _params: Dict[str, str]) -> None:
+            snap = self.playback.read_frame_snapshot()
+            if snap is None:
+                req.send_response(int(HTTPStatus.NO_CONTENT))
+                req._write_security_headers()
+                req.send_header("Cache-Control", "no-store")
+                req.send_header("Content-Length", "0")
+                req.end_headers()
+                return
+            width, height, rgb_bytes, mtime = snap
+            req.send_response(int(HTTPStatus.OK))
+            req._write_security_headers()
+            req.send_header("Content-Type", "application/octet-stream")
+            req.send_header("Cache-Control", "no-store")
+            req.send_header("X-Matrix-Width", str(width))
+            req.send_header("X-Matrix-Height", str(height))
+            req.send_header("X-Frame-Timestamp", f"{mtime:.3f}")
+            req.send_header("Content-Length", str(len(rgb_bytes)))
+            req.end_headers()
+            req.wfile.write(rgb_bytes)
+
+        # ---- Local-only Remote Target Management ----
+
+        @router.get("/api/targets", require_auth=True)
+        def list_targets(req: MatrixRequestHandler, _params: Dict[str, str]) -> None:
+            req.send_json(self.targets.list_targets())
+
+        @router.post("/api/targets", require_auth=True)
+        def add_target(req: MatrixRequestHandler, _params: Dict[str, str]) -> None:
+            body = req.read_json_body()
+            if body is None:
+                return
+            try:
+                created = self.targets.add_target(
+                    str(body.get("name", "")), str(body.get("url", ""))
+                )
+            except ValueError as exc:
+                req.send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            payload = self.targets.list_targets()
+            payload["target"] = created
+            req.send_json(payload, status=HTTPStatus.CREATED)
+
+        @router.post("/api/targets/test", require_auth=True)
+        def test_target_url(req: MatrixRequestHandler, _params: Dict[str, str]) -> None:
+            body = req.read_json_body()
+            if body is None:
+                return
+            try:
+                result = self.targets.test_url(str(body.get("url", "")))
+            except ValueError as exc:
+                req.send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            req.send_json(result)
+
+        @router.post("/api/targets/active", require_auth=True)
+        def set_active_target(req: MatrixRequestHandler, _params: Dict[str, str]) -> None:
+            body = req.read_json_body()
+            if body is None:
+                return
+            try:
+                state = self.targets.set_active_target(str(body.get("targetId", "")))
+            except ValueError as exc:
+                req.send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            req.send_json(state)
+
+        @router.delete("/api/targets/:id", require_auth=True)
+        def delete_target(req: MatrixRequestHandler, params: Dict[str, str]) -> None:
+            try:
+                deleted = self.targets.delete_target(params["id"])
+            except ValueError as exc:
+                req.send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            if not deleted:
+                req.send_json({"error": "Target not found."}, status=HTTPStatus.NOT_FOUND)
+                return
+            req.send_json(self.targets.list_targets())
+
+        @router.post("/api/targets/:id/test", require_auth=True)
+        def test_saved_target(req: MatrixRequestHandler, params: Dict[str, str]) -> None:
+            entry = self.targets.get_target(params["id"])
+            if not entry:
+                req.send_json({"error": "Target not found."}, status=HTTPStatus.NOT_FOUND)
+                return
+            token = entry.get("sessionToken", "")
+            result = self.targets.test_url(entry["url"], session_token=token)
+            if result.get("reachable") and not result.get("authenticated") and token:
+                self.targets.clear_target_session(entry["id"], expected_token=token)
+            result["targetsState"] = self.targets.list_targets()
+            req.send_json(result)
+
+        @router.post("/api/targets/:id/login", require_auth=True)
+        def login_remote_target(req: MatrixRequestHandler, params: Dict[str, str]) -> None:
+            body = req.read_json_body()
+            if body is None:
+                return
+            try:
+                result = self.targets.authenticate_target(
+                    params["id"],
+                    str(body.get("password", "")),
+                    setup=bool(body.get("setup", False)),
+                )
+            except ValueError as exc:
+                req.send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            except RemoteUnreachableError as exc:
+                req.send_json(
+                    {
+                        "error": str(exc),
+                        "remoteUnreachable": True,
+                        "targetId": params["id"],
+                    },
+                    status=HTTPStatus.BAD_GATEWAY,
+                )
+                return
+            except RemoteRequestError as exc:
+                extra = (
+                    {"X-Remote-Auth-Required": "1"} if exc.remote_auth_required else None
+                )
+                req.send_json(
+                    {
+                        "error": str(exc),
+                        "remoteAuthRequired": exc.remote_auth_required,
+                        "targetId": params["id"],
+                    },
+                    status=HTTPStatus(exc.status),
+                    extra_headers=extra,
+                )
+                return
+            result["targetsState"] = self.targets.list_targets()
+            req.send_json(result)
+
+        @router.post("/api/targets/:id/logout", require_auth=True)
+        def logout_remote_target(req: MatrixRequestHandler, params: Dict[str, str]) -> None:
+            try:
+                result = self.targets.logout_target(params["id"])
+            except ValueError as exc:
+                req.send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            result["targetsState"] = self.targets.list_targets()
+            req.send_json(result)
+
+        # ---- System / Git Updates (proxied when a remote Pi is active) ----
+
+        @router.get("/api/system/git-status", require_auth=True)
+        def system_git_status(
+            req: MatrixRequestHandler, _params: Dict[str, str]
+        ) -> None:
+            parsed = urlparse(req.path)
+            qs = parse_qs(parsed.query)
+            do_fetch = (qs.get("fetch", ["0"])[0] or "").strip().lower() in (
+                "1",
+                "true",
+                "yes",
+            )
+            try:
+                status = self.git_updater.get_status(fetch=do_fetch)
+            except GitOperationError as exc:
+                req.send_json({"error": str(exc)}, status=HTTPStatus(exc.status))
+                return
+            status["canRestart"] = self.restart_callback is not None
+            req.send_json(status)
+
+        @router.post("/api/system/git-pull", require_auth=True)
+        def system_git_pull(
+            req: MatrixRequestHandler, _params: Dict[str, str]
+        ) -> None:
+            body = req.read_json_body()
+            if body is None:
+                return
+            auto_rebuild = bool(body.get("autoRebuild", True))
+            try:
+                result = self.git_updater.pull(auto_rebuild=auto_rebuild)
+            except GitOperationError as exc:
+                req.send_json({"error": str(exc)}, status=HTTPStatus(exc.status))
+                return
+            result["canRestart"] = self.restart_callback is not None
+            req.send_json(result)
+
+        @router.post("/api/system/restart", require_auth=True)
+        def system_restart(
+            req: MatrixRequestHandler, _params: Dict[str, str]
+        ) -> None:
+            if self.restart_callback is None:
+                req.send_json(
+                    {"error": "Server restart is not enabled in this runtime."},
+                    status=HTTPStatus.NOT_IMPLEMENTED,
+                )
+                return
+            req.send_json({"restarting": True})
+            self.restart_callback()
+
         return router
 
 
@@ -691,6 +896,31 @@ class MatrixRequestHandler(BaseHTTPRequestHandler):
                         status=HTTPStatus.UNAUTHORIZED,
                     )
                     return
+
+            # Transparently proxy target-scoped APIs to the selected remote Pi (loop-safe)
+            is_local_only = any(
+                path == prefix or path.startswith(prefix)
+                for prefix in LOCAL_ONLY_PREFIXES
+            )
+            if not is_local_only and self.headers.get("X-Led-Matrix-Proxy") != "1":
+                try:
+                    active_remote = self.ctx.targets.resolve_remote_for_request(
+                        self.headers.get("X-Matrix-Target")
+                    )
+                except ValueError as exc:
+                    self.send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                    return
+                if active_remote is not None:
+                    self.ctx.targets.proxy_request(
+                        active_remote,
+                        method,
+                        self.path,
+                        self.headers,
+                        self.rfile,
+                        self,
+                    )
+                    return
+
             try:
                 route.handler(self, params)
             except (BrokenPipeError, ConnectionResetError):
@@ -792,7 +1022,9 @@ def create_server(
     repo_root: Path,
     static_dir: Optional[Path] = None,
     auth_file: Optional[Path] = None,
+    targets_file: Optional[Path] = None,
     env_password: Optional[str] = None,
+    restart_callback: Optional[Callable[[], None]] = None,
 ) -> ThreadingHTTPServer:
     httpd = ThreadingHTTPServer((host, port), MatrixRequestHandler)
     httpd.daemon_threads = True
@@ -800,7 +1032,9 @@ def create_server(
         repo_root=repo_root,
         static_dir=static_dir,
         auth_file=auth_file,
+        targets_file=targets_file,
         env_password=env_password,
+        restart_callback=restart_callback,
     )
     return httpd
 
@@ -881,7 +1115,28 @@ def main() -> None:
         _run_with_reloader(sys.argv[1:])
         return
 
-    httpd = create_server(args.host, args.port, repo_root=args.repo_root)
+    restart_requested = threading.Event()
+    httpd_holder: list[ThreadingHTTPServer] = []
+
+    def _request_restart() -> None:
+        if restart_requested.is_set():
+            return
+        restart_requested.set()
+
+        def _trigger_shutdown() -> None:
+            time.sleep(0.35)
+            if httpd_holder:
+                httpd_holder[0].shutdown()
+
+        threading.Thread(target=_trigger_shutdown, daemon=True).start()
+
+    httpd = create_server(
+        args.host,
+        args.port,
+        repo_root=args.repo_root,
+        restart_callback=_request_restart,
+    )
+    httpd_holder.append(httpd)
     print(f"LED Matrix Web Server listening on http://{args.host}:{args.port}")
     print(f"Repository root: {args.repo_root.resolve()}")
     try:
@@ -889,8 +1144,19 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\nShutting down web server...")
     finally:
-        httpd.app_ctx.playback.shutdown()  # type: ignore[attr-defined]
-        httpd.server_close()
+        if restart_requested.is_set():
+            print("\nRestarting web server to load updated code...")
+            sys.stdout.flush()
+            sys.stderr.flush()
+            httpd.app_ctx.playback.close_log_handle()  # type: ignore[attr-defined]
+            httpd.server_close()
+            os.execv(
+                sys.executable,
+                [sys.executable, "-m", "web.server.app", *sys.argv[1:]],
+            )
+        else:
+            httpd.app_ctx.playback.shutdown()  # type: ignore[attr-defined]
+            httpd.server_close()
 
 
 if __name__ == "__main__":

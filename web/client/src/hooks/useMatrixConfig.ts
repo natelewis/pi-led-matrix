@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '@/api/client';
 import type {
   ConfigSchemaMetadata,
@@ -8,11 +8,13 @@ import type {
 
 interface UseMatrixConfigOptions {
   enabled: boolean;
+  targetKey?: string;
   onUnauthorized?: (err: unknown) => boolean;
 }
 
 export function useMatrixConfig({
   enabled,
+  targetKey = 'local',
   onUnauthorized,
 }: UseMatrixConfigOptions) {
   const [savedConfig, setSavedConfig] = useState<MatrixConfig | null>(null);
@@ -31,9 +33,11 @@ export function useMatrixConfig({
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const loadSeqRef = useRef(0);
 
   const loadAll = useCallback(async () => {
     if (!enabled) return;
+    const seq = ++loadSeqRef.current;
     setLoading(true);
     setLoadError(null);
     try {
@@ -41,6 +45,7 @@ export function useMatrixConfig({
         api.config.get(),
         api.effects.list(),
       ]);
+      if (seq !== loadSeqRef.current) return;
       setSavedConfig(cfgRes.config);
       setDraft(structuredClone(cfgRes.config));
       setSource(cfgRes.source);
@@ -51,21 +56,27 @@ export function useMatrixConfig({
       setFonts(fxRes.fonts);
       setFieldErrors({});
     } catch (err) {
+      if (seq !== loadSeqRef.current) return;
       if (onUnauthorized?.(err)) return;
       setLoadError(err instanceof Error ? err.message : 'Failed to load configuration');
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) {
+        setLoading(false);
+      }
     }
   }, [enabled, onUnauthorized]);
 
   useEffect(() => {
+    loadSeqRef.current += 1;
     if (enabled) {
       void loadAll();
     } else {
       setSavedConfig(null);
       setDraft(null);
+      setLoadError(null);
+      setLoading(false);
     }
-  }, [enabled, loadAll]);
+  }, [enabled, targetKey, loadAll]);
 
   const isDirty = useMemo(() => {
     if (!savedConfig || !draft) return false;

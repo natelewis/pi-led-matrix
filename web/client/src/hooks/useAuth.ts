@@ -51,7 +51,7 @@ export function useAuth() {
   );
 
   const handleUnauthorized = useCallback((err: unknown) => {
-    if (err instanceof ApiError && err.status === 401) {
+    if (err instanceof ApiError && err.status === 401 && !err.remoteAuthRequired) {
       setStatus((prev) =>
         prev ? { ...prev, authenticated: false, expiresAt: null } : null
       );

@@ -11,7 +11,7 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    port: Number(process.env.LED_MATRIX_DEV_PORT) || 5188,
     proxy: {
       '/api': {
         target: process.env.VITE_API_ORIGIN || 'http://127.0.0.1:8080',

@@ -42,6 +42,7 @@ class WebServerTestCase(unittest.TestCase):
             repo_root=self.tmpdir,
             static_dir=static_dir,
             auth_file=self.tmpdir / "web" / ".auth.json",
+            targets_file=self.tmpdir / "web" / ".targets.json",
             env_password="",
         )
         self.port = self.server.server_address[1]
@@ -476,6 +477,357 @@ class WebServerTestCase(unittest.TestCase):
                 "POST", "/api/auth/login", {"password": "wrong-password"}
             )
         self.assertEqual(last_status, 429)
+
+    def test_remote_target_proxy_and_frame_mirror(self) -> None:
+        import struct
+
+        # Spin up a second isolated server acting as a remote Raspberry Pi
+        remote_dir = Path(tempfile.mkdtemp(prefix="led_matrix_remote_pi_"))
+        try:
+            shutil.copy2(REPO_ROOT / "default_config.json", remote_dir / "default_config.json")
+            shutil.copytree(REPO_ROOT / "src" / "effects", remote_dir / "src" / "effects")
+            shutil.copytree(REPO_ROOT / "fonts", remote_dir / "fonts")
+            remote_static = remote_dir / "web" / "client" / "dist"
+            remote_static.mkdir(parents=True)
+            (remote_static / "index.html").write_text("<html>remote</html>", encoding="utf-8")
+
+            remote_server = create_server(
+                "127.0.0.1",
+                0,
+                repo_root=remote_dir,
+                static_dir=remote_static,
+                auth_file=remote_dir / "web" / ".auth.json",
+                targets_file=remote_dir / "web" / ".targets.json",
+                env_password="pi-password",
+            )
+            remote_port = remote_server.server_address[1]
+            remote_thread = threading.Thread(target=remote_server.serve_forever, daemon=True)
+            remote_thread.start()
+
+            try:
+                # 1. Authenticate to local Mac Studio
+                _, headers, _ = self._request(
+                    "POST", "/api/auth/setup", {"password": "mac-password"}
+                )
+                local_cookie = self._extract_cookie(headers)
+
+                remote_url = f"http://127.0.0.1:{remote_port}"
+
+                # 2. Test reachability of the remote Pi
+                status, _, probe = self._request(
+                    "POST", "/api/targets/test", {"url": remote_url}, cookie=local_cookie
+                )
+                self.assertEqual(status, 200)
+                self.assertTrue(probe["reachable"])
+                self.assertTrue(probe["initialized"])
+                self.assertFalse(probe["authenticated"])
+
+                # 3. Add remote Pi target
+                status, _, added = self._request(
+                    "POST",
+                    "/api/targets",
+                    {"name": "Living Room Pi", "url": remote_url},
+                    cookie=local_cookie,
+                )
+                self.assertEqual(status, 201)
+                target_id = added["target"]["id"]
+
+                # 4. Switch active target to remote Pi BEFORE remote login -> 401 with remoteAuthRequired
+                status, _, _ = self._request(
+                    "POST", "/api/targets/active", {"targetId": target_id}, cookie=local_cookie
+                )
+                self.assertEqual(status, 200)
+
+                status, resp_headers, err_body = self._request(
+                    "GET", "/api/config", cookie=local_cookie
+                )
+                self.assertEqual(status, 401)
+                self.assertTrue(err_body.get("remoteAuthRequired"))
+                self.assertEqual(resp_headers.get("X-Remote-Auth-Required"), "1")
+
+                # Local Mac auth is still intact!
+                status, _, local_auth = self._request(
+                    "GET", "/api/auth/status", cookie=local_cookie
+                )
+                self.assertEqual(status, 200)
+                self.assertTrue(local_auth["authenticated"])
+
+                # 5. Sign in to remote Pi target
+                status, _, login_res = self._request(
+                    "POST",
+                    f"/api/targets/{target_id}/login",
+                    {"password": "pi-password"},
+                    cookie=local_cookie,
+                )
+                self.assertEqual(status, 200)
+                self.assertTrue(login_res["authenticated"])
+
+                # 6. Proxied GET/PUT /api/config edits the REMOTE Pi's config.json (not local!)
+                status, _, remote_cfg = self._request(
+                    "GET", "/api/config", cookie=local_cookie
+                )
+                self.assertEqual(status, 200)
+                updated = dict(remote_cfg["config"])
+                updated["brightness"] = 0.77
+                status, _, saved_remote = self._request(
+                    "PUT", "/api/config", {"config": updated}, cookie=local_cookie
+                )
+                self.assertEqual(status, 200)
+                self.assertAlmostEqual(saved_remote["config"]["brightness"], 0.77)
+                self.assertTrue((remote_dir / "config.json").is_file())
+                self.assertFalse((self.tmpdir / "config.json").is_file())
+
+                # 7. Live Frame Mirror proxies binary RGB frames from remote Pi & touches lease
+                remote_mirror_dir = remote_server.app_ctx.playback.mirror_dir
+                remote_mirror_dir.mkdir(parents=True, exist_ok=True)
+                rgb_pixels = bytes([255, 0, 128]) * (4 * 2)
+                (remote_mirror_dir / "frame.bin").write_bytes(
+                    struct.pack(">HH", 4, 2) + rgb_pixels
+                )
+                status, frame_headers, frame_bytes = self._request(
+                    "GET", "/api/playback/frame", cookie=local_cookie
+                )
+                self.assertEqual(status, 200)
+                self.assertEqual(frame_headers.get("X-Matrix-Width"), "4")
+                self.assertEqual(frame_headers.get("X-Matrix-Height"), "2")
+                self.assertEqual(frame_headers.get("Cache-Control"), "private, no-store")
+                self.assertEqual(frame_bytes, rgb_pixels)
+                self.assertTrue((remote_mirror_dir / "mirror.lease").is_file())
+
+                # 7b. X-Matrix-Target: local overrides global activeTargetId per request
+                req_local = urllib.request.Request(
+                    f"http://127.0.0.1:{self.port}/api/config",
+                    headers={"Cookie": local_cookie, "X-Matrix-Target": "local"},
+                    method="GET",
+                )
+                with urllib.request.urlopen(req_local) as resp:
+                    local_cfg_body = json.loads(resp.read().decode("utf-8"))
+                self.assertEqual(local_cfg_body["source"], "default")
+                self.assertAlmostEqual(local_cfg_body["config"]["brightness"], 0.2)
+
+                # 7c. Cloud metadata IP is rejected by URL validator
+                status, _, _ = self._request(
+                    "POST",
+                    "/api/targets/test",
+                    {"url": "http://169.254.169.254"},
+                    cookie=local_cookie,
+                )
+                self.assertEqual(status, 400)
+
+                # 8. Deleting active remote target falls back cleanly to local
+                status, _, del_res = self._request(
+                    "DELETE", f"/api/targets/{target_id}", cookie=local_cookie
+                )
+                self.assertEqual(status, 200)
+                self.assertEqual(del_res["activeTargetId"], "local")
+            finally:
+                remote_server.shutdown()
+                remote_server.server_close()
+        finally:
+            shutil.rmtree(remote_dir, ignore_errors=True)
+
+    def test_remote_git_pull_and_restart(self) -> None:
+        if not shutil.which("git"):
+            self.skipTest("git is not installed")
+
+        sandbox = Path(tempfile.mkdtemp(prefix="led_matrix_git_test_"))
+        try:
+            bare_dir = sandbox / "origin.git"
+            dev_dir = sandbox / "dev"
+            pi_dir = sandbox / "pi"
+
+            git_env = {
+                **os.environ,
+                "GIT_AUTHOR_NAME": "Test User",
+                "GIT_AUTHOR_EMAIL": "test@example.com",
+                "GIT_COMMITTER_NAME": "Test User",
+                "GIT_COMMITTER_EMAIL": "test@example.com",
+                "GIT_TERMINAL_PROMPT": "0",
+            }
+
+            def run_git(cwd: Path, *args: str) -> None:
+                res = subprocess.run(
+                    ["git", *args],
+                    cwd=str(cwd),
+                    env=git_env,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(
+                    res.returncode,
+                    0,
+                    f"git {' '.join(args)} failed: {res.stderr or res.stdout}",
+                )
+
+            bare_dir.mkdir()
+            run_git(bare_dir, "init", "--bare", "-b", "main")
+            run_git(sandbox, "clone", str(bare_dir), str(dev_dir))
+            shutil.copy2(REPO_ROOT / "default_config.json", dev_dir / "default_config.json")
+            (dev_dir / "src").mkdir(exist_ok=True)
+            (dev_dir / "src" / "effect.py").write_text("VALUE = 1\n", encoding="utf-8")
+            (dev_dir / "web" / "server").mkdir(parents=True, exist_ok=True)
+            (dev_dir / "web" / "server" / "dummy.py").write_text("V = 1\n", encoding="utf-8")
+            run_git(dev_dir, "add", ".")
+            run_git(dev_dir, "commit", "-m", "initial commit")
+            run_git(dev_dir, "push", "-u", "origin", "main")
+
+            # Clone onto simulated Pi
+            run_git(sandbox, "clone", str(bare_dir), str(pi_dir))
+            (pi_dir / "web" / "client" / "dist").mkdir(parents=True, exist_ok=True)
+
+            # Push a new commit from dev repo so Pi is 1 commit behind
+            (dev_dir / "src" / "effect.py").write_text("VALUE = 2\n", encoding="utf-8")
+            (dev_dir / "web" / "server" / "dummy.py").write_text("V = 2\n", encoding="utf-8")
+            run_git(dev_dir, "add", ".")
+            run_git(dev_dir, "commit", "-m", "add new matrix effect")
+            run_git(dev_dir, "push", "origin", "main")
+
+            restarted = threading.Event()
+            pi_server = create_server(
+                "127.0.0.1",
+                0,
+                repo_root=pi_dir,
+                static_dir=pi_dir / "web" / "client" / "dist",
+                auth_file=pi_dir / "web" / ".auth.json",
+                targets_file=pi_dir / "web" / ".targets.json",
+                env_password="pi-password",
+                restart_callback=restarted.set,
+            )
+            pi_port = pi_server.server_address[1]
+            pi_thread = threading.Thread(target=pi_server.serve_forever, daemon=True)
+            pi_thread.start()
+            try:
+                _, headers, _ = self._request(
+                    "POST", "/api/auth/setup", {"password": "local-password"}
+                )
+                local_cookie = self._extract_cookie(headers)
+                # Non-git local tmpdir reports isGitRepo=False cleanly
+                status, _, local_git = self._request(
+                    "GET", "/api/system/git-status", cookie=local_cookie
+                )
+                self.assertEqual(status, 200)
+                self.assertFalse(local_git["isGitRepo"])
+                self.assertFalse(local_git["canRestart"])
+
+                # Add, switch, and log into remote Pi
+                status, _, added = self._request(
+                    "POST",
+                    "/api/targets",
+                    {"name": "Pi Git Test", "url": f"http://127.0.0.1:{pi_port}"},
+                    cookie=local_cookie,
+                )
+                self.assertEqual(status, 201)
+                target_id = added["target"]["id"]
+                status, _, _ = self._request(
+                    "POST",
+                    f"/api/targets/{target_id}/login",
+                    {"password": "pi-password"},
+                    cookie=local_cookie,
+                )
+                self.assertEqual(status, 200)
+                status, _, _ = self._request(
+                    "POST",
+                    "/api/targets/active",
+                    {"targetId": target_id},
+                    cookie=local_cookie,
+                )
+                self.assertEqual(status, 200)
+
+                # Proxied git-status?fetch=1 detects the Pi is 1 commit behind
+                status, _, pi_git = self._request(
+                    "GET", "/api/system/git-status?fetch=1", cookie=local_cookie
+                )
+                self.assertEqual(status, 200)
+                self.assertTrue(pi_git["isGitRepo"])
+                self.assertEqual(pi_git["branch"], "main")
+                self.assertEqual(pi_git["behind"], 1)
+                self.assertTrue(pi_git["canRestart"])
+
+                # Dirty tracked file blocks git pull cleanly with 409
+                (pi_dir / "src" / "effect.py").write_text("VALUE = 99\n", encoding="utf-8")
+                status, _, dirty_err = self._request(
+                    "POST", "/api/system/git-pull", {}, cookie=local_cookie
+                )
+                self.assertEqual(status, 409)
+                self.assertIn("src/effect.py", dirty_err["error"])
+
+                # Revert local tracked edit -> proxied git pull fast-forwards cleanly!
+                run_git(pi_dir, "checkout", "--", "src/effect.py")
+                status, _, pull_res = self._request(
+                    "POST", "/api/system/git-pull", {}, cookie=local_cookie
+                )
+                self.assertEqual(status, 200)
+                self.assertTrue(pull_res["updated"])
+                self.assertTrue(pull_res["serverFilesChanged"])
+                self.assertTrue(pull_res["playbackFilesChanged"])
+                self.assertIn("src/effect.py", pull_res["changedFiles"])
+                self.assertEqual(pull_res["status"]["behind"], 0)
+                self.assertEqual(
+                    (pi_dir / "src" / "effect.py").read_text(encoding="utf-8"),
+                    "VALUE = 2\n",
+                )
+
+                # Proxied restart triggers the remote Pi's restart callback
+                status, _, restart_res = self._request(
+                    "POST", "/api/system/restart", {}, cookie=local_cookie
+                )
+                self.assertEqual(status, 200)
+                self.assertTrue(restart_res["restarting"])
+                self.assertTrue(restarted.is_set())
+
+                # Env-managed Pi persisted its session_secret so cookies survive restarts
+                auth_data = json.loads(
+                    (pi_dir / "web" / ".auth.json").read_text(encoding="utf-8")
+                )
+                self.assertTrue(auth_data.get("session_secret"))
+                self.assertEqual(auth_data.get("password_hash"), "")
+
+                # Conditional rebuild runs pip + npm when requirements.txt & web/client/ change
+                (dev_dir / "requirements.txt").write_text("# reqs\n", encoding="utf-8")
+                (dev_dir / "web" / "client").mkdir(parents=True, exist_ok=True)
+                (dev_dir / "web" / "client" / "package.json").write_text(
+                    '{"name":"client"}\n', encoding="utf-8"
+                )
+                run_git(dev_dir, "add", ".")
+                run_git(dev_dir, "commit", "-m", "update python and frontend deps")
+                run_git(dev_dir, "push", "origin", "main")
+
+                # Simulate an existing frontend install on the target
+                (pi_dir / "web" / "client" / "node_modules").mkdir(
+                    parents=True, exist_ok=True
+                )
+                ran_cmds: list[list[str]] = []
+
+                def fake_run_tool(cmd, *, cwd, timeout=240.0, extra_env=None):
+                    ran_cmds.append(list(cmd))
+                    return True, "ok"
+
+                orig_run_tool = pi_server.app_ctx.git_updater._run_tool
+                pi_server.app_ctx.git_updater._run_tool = fake_run_tool
+                try:
+                    status, _, rebuild_pull = self._request(
+                        "POST", "/api/system/git-pull", {}, cookie=local_cookie
+                    )
+                finally:
+                    pi_server.app_ctx.git_updater._run_tool = orig_run_tool
+
+                self.assertEqual(status, 200)
+                self.assertTrue(rebuild_pull["updated"])
+                self.assertTrue(rebuild_pull["pythonDepsChanged"])
+                self.assertTrue(rebuild_pull["nodeDepsChanged"])
+                self.assertTrue(rebuild_pull["rebuilt"])
+                self.assertFalse(rebuild_pull["rebuildFailed"])
+                step_names = [s["name"] for s in rebuild_pull["rebuildSteps"]]
+                self.assertIn("python-deps", step_names)
+                if shutil.which("npm"):
+                    self.assertIn("node-deps", step_names)
+                    self.assertIn("frontend-build", step_names)
+                self.assertTrue(any("pip" in cmd for cmd in ran_cmds))
+            finally:
+                pi_server.shutdown()
+                pi_server.server_close()
+        finally:
+            shutil.rmtree(sandbox, ignore_errors=True)
 
 
 if __name__ == "__main__":

@@ -70,11 +70,20 @@ class AuthManager:
                     return data
             except (OSError, json.JSONDecodeError):
                 pass
-        return {
+        state = {
             "session_secret": secrets.token_hex(32),
             "password_salt": "",
             "password_hash": "",
         }
+        if self.is_env_managed:
+            # Persist the signing secret (0600, no password hash) so signed cookies
+            # survive in-place server restarts and Pi reboots seamlessly.
+            self._state = state
+            try:
+                self._persist_state_locked()
+            except OSError:
+                pass
+        return state
 
     def _persist_state_locked(self) -> None:
         """Atomically persist auth state with 0600 permissions from creation (no TOCTOU)."""
