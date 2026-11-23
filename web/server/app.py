@@ -639,41 +639,6 @@ class AppContext:
             result["targetsState"] = self.targets.list_targets()
             req.send_json(result)
 
-        @router.post("/api/targets/:id/push-config", require_auth=True)
-        def push_local_config(req: MatrixRequestHandler, params: Dict[str, str]) -> None:
-            local_cfg = self.config_store.load()["config"]
-            try:
-                remote_resp = self.targets.push_config_to_target(params["id"], local_cfg)
-            except ValueError as exc:
-                req.send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
-                return
-            except PermissionError as exc:
-                req.send_json(
-                    {
-                        "error": str(exc),
-                        "remoteAuthRequired": True,
-                        "targetId": params["id"],
-                        "targetsState": self.targets.list_targets(),
-                    },
-                    status=HTTPStatus.UNAUTHORIZED,
-                    extra_headers={"X-Remote-Auth-Required": "1"},
-                )
-                return
-            except RemoteUnreachableError as exc:
-                req.send_json(
-                    {
-                        "error": str(exc),
-                        "remoteUnreachable": True,
-                        "targetId": params["id"],
-                    },
-                    status=HTTPStatus.BAD_GATEWAY,
-                )
-                return
-            except RemoteRequestError as exc:
-                req.send_json({"error": str(exc)}, status=HTTPStatus.BAD_GATEWAY)
-                return
-            req.send_json({"ok": True, "remote": remote_resp})
-
         # ---- System / Git Updates (proxied when a remote Pi is active) ----
 
         @router.get("/api/system/git-status", require_auth=True)

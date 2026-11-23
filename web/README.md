@@ -4,7 +4,7 @@ A self-contained local web server and React frontend for configuring and control
 
 ## Features
 
-- **Remote Sessions & Multi-Device Studio**: Connect your local Mac Studio to one or more remote Raspberry Pis over LAN via a built-in authenticated reverse proxy (zero CORS/cookie issues), switch devices from the sidebar, push your local `config.json` straight to a Pi, and watch a **Live Matrix Mirror** (~6–7 FPS pixel stream) of what's playing in the other room.
+- **Remote Sessions & Multi-Device Studio**: Connect your local Mac Studio to one or more remote Raspberry Pis over LAN via a built-in authenticated reverse proxy (zero CORS/cookie issues), switch devices from the sidebar, watch a **Live Matrix Mirror** (~6–7 FPS pixel stream) of what's playing in the other room, and detect & apply remote software updates with one-click **Pull & Restart**.
 - **Live Playback Control**: Start/stop the playlist runner, skip effects in real time, jump directly to any playlist item with **Play Now**, and hot-reload `config.json` edits into a running playlist without restarting.
 - **Playlist Builder**: Drag-and-drop or button-based ordering, effect duplication (to weight random playback), searchable auto-discovered catalog from `src/effects/`, one-click terminal `make run ...` command copying, and per-effect editors (`marquee`, `image`, `video`, or custom JSON).
 - **Smart Image & Video Uploaders**: Upload images or videos directly to gitignored `_uploads/` folders (`src/effects/image/_uploads/` and `src/effects/video/_uploads/`), automatically sized to your matrix `pixel_width × pixel_height` with saliency-guided smart cropping, drag-to-adjust framing, zoom, optional video trim, and live LED dot previews.
@@ -82,9 +82,11 @@ web/
 │   ├── auth.py           # PBKDF2 password auth & signed HttpOnly cookies
 │   ├── config_store.py   # Schema validation & atomic writes to config.json
 │   ├── effects.py        # AST-based discovery of src/effects/*, fonts/*, and _uploads/*
+│   ├── git_ops.py        # Safe non-interactive git status & --ff-only pull helpers
 │   ├── media.py          # RGBA PNG encoder & ffmpeg video transcoder for _uploads/
-│   ├── playback.py       # Local playlist process manager & _runtime IPC bridge
+│   ├── playback.py       # Local playlist process manager, _runtime IPC & live frame mirror
 │   ├── router.py         # Lightweight Express-style route registry
+│   ├── targets.py        # Remote Pi registry & authenticated streaming HTTP reverse proxy
 │   └── tests/            # Unit & integration tests
 └── client/
     └── src/

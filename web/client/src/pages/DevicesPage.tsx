@@ -1,12 +1,12 @@
 import { useRef, useState, type FormEvent } from 'react';
 import {
+  ArrowDownToLine,
   CheckCircle2,
   KeyRound,
   Laptop,
   Lock,
   LogOut,
   Plus,
-  Send,
   Server,
   Terminal,
   Trash2,
@@ -27,12 +27,8 @@ import {
   SectionHeader,
   useToast,
 } from '@/components/ui';
-import type {
-  GitPullResponse,
-  MatrixTarget,
-  TargetProbeResult,
-  TargetsState,
-} from '@/types/matrix';
+import type { GitUpdatesController } from '@/hooks/useGitUpdates';
+import type { MatrixTarget, TargetProbeResult, TargetsState } from '@/types/matrix';
 
 export interface DevicesPageProps {
   targets: MatrixTarget[];
@@ -40,15 +36,13 @@ export interface DevicesPageProps {
   activeTargetId: string;
   targetDataEnabled: boolean;
   switching: boolean;
+  gitUpdates: GitUpdatesController;
   onSyncTargetsState: (state: TargetsState) => void;
   onSelectTarget: (targetId: string) => Promise<unknown>;
   onAddTarget: (name: string, url: string) => Promise<MatrixTarget>;
   onRemoveTarget: (id: string) => Promise<unknown>;
   onLoginTarget: (id: string, password: string, setup?: boolean) => Promise<unknown>;
   onLogoutTarget: (id: string) => Promise<unknown>;
-  onPushLocalConfig: (id: string) => Promise<unknown>;
-  onApiError?: (err: unknown) => boolean;
-  onRepoUpdated?: (res: GitPullResponse) => void;
 }
 
 export function DevicesPage({
@@ -57,15 +51,13 @@ export function DevicesPage({
   activeTargetId,
   targetDataEnabled,
   switching,
+  gitUpdates,
   onSyncTargetsState,
   onSelectTarget,
   onAddTarget,
   onRemoveTarget,
   onLoginTarget,
   onLogoutTarget,
-  onPushLocalConfig,
-  onApiError,
-  onRepoUpdated,
 }: DevicesPageProps) {
   const { notify } = useToast();
 
@@ -87,10 +79,43 @@ export function DevicesPage({
   const [loginError, setLoginError] = useState<string | null>(null);
   const loginModalSeqRef = useRef(0);
 
-  const [pushConfirmTarget, setPushConfirmTarget] = useState<MatrixTarget | null>(null);
-  const [pushing, setPushing] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<MatrixTarget | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  const handlePullAndRestart = async () => {
+    try {
+      const outcome = await gitUpdates.pullAndRestart();
+      if (!outcome) return;
+      if (!outcome.pull.updated) {
+        notify('info', `${activeTarget.name} is already up to date`);
+        return;
+      }
+      const extras: string[] = [];
+      if (outcome.serverRestarted) {
+        extras.push(outcome.serverBackOnline ? 'server restarted' : 'server restarting');
+      }
+      if (outcome.playbackRestarted) {
+        extras.push('playlist reloaded');
+      }
+      notify(
+        'success',
+        `Updated ${activeTarget.name} (${outcome.pull.beforeCommit} → ${outcome.pull.afterCommit})`,
+        extras.length > 0
+          ? `${outcome.pull.totalChangedFiles} file${
+              outcome.pull.totalChangedFiles === 1 ? '' : 's'
+            } changed · ${extras.join(' & ')}.`
+          : `${outcome.pull.totalChangedFiles} file${
+              outcome.pull.totalChangedFiles === 1 ? '' : 's'
+            } changed.`
+      );
+    } catch (err) {
+      notify(
+        'error',
+        `Update failed on ${activeTarget.name}`,
+        err instanceof Error ? err.message : 'Unable to pull updates.'
+      );
+    }
+  };
 
   const handleTestNewUrl = async () => {
     if (!url.trim()) return;
@@ -213,7 +238,7 @@ export function DevicesPage({
     <div className="space-y-6">
       <SectionHeader
         title="Devices & Remote Sessions"
-        description="Control a Raspberry Pi in another room from this Studio — switch targets seamlessly, live-mirror its frames, or push your local Mac config directly to the Pi."
+        description="Control a Raspberry Pi in another room from this Studio — switch targets seamlessly, live-mirror its frames, and pull software updates headlessly."
       />
 
       {/* Saved Devices */}
@@ -259,6 +284,13 @@ export function DevicesPage({
                       {active && (
                         <Badge tone={target.isLocal ? 'cyan' : 'violet'}>Active</Badge>
                       )}
+                      {active && gitUpdates.updatesAvailable > 0 && (
+                        <Badge tone="amber">
+                          <ArrowDownToLine className="h-3 w-3" />
+                          {gitUpdates.updatesAvailable} update
+                          {gitUpdates.updatesAvailable === 1 ? '' : 's'}
+                        </Badge>
+                      )}
                       {!target.isLocal && (
                         <Badge tone={target.hasSession ? 'emerald' : 'amber'}>
                           {target.hasSession ? 'Signed in' : 'Locked'}
@@ -290,6 +322,29 @@ export function DevicesPage({
                     </Button>
                   )}
 
+                  {active &&
+                    targetDataEnabled &&
+                    gitUpdates.status?.isGitRepo &&
+                    !gitUpdates.status.detached && (
+                      <Button
+                        variant={gitUpdates.updatesAvailable > 0 ? 'primary' : 'secondary'}
+                        size="sm"
+                        loading={gitUpdates.updating}
+                        disabled={gitUpdates.status.dirty || gitUpdates.restarting}
+                        onClick={() => void handlePullAndRestart()}
+                        leftIcon={<ArrowDownToLine className="h-3.5 w-3.5" />}
+                        title={
+                          gitUpdates.status.dirty
+                            ? 'Commit or discard tracked local changes before pulling'
+                            : 'Fast-forward git pull and restart the server automatically'
+                        }
+                      >
+                        {gitUpdates.updatesAvailable > 0
+                          ? `Pull & Restart (${gitUpdates.updatesAvailable})`
+                          : 'Pull & Restart'}
+                      </Button>
+                    )}
+
                   {!target.isLocal && (
                     <>
                       <Button
@@ -303,36 +358,25 @@ export function DevicesPage({
                       </Button>
 
                       {target.hasSession ? (
-                        <>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => setPushConfirmTarget(target)}
-                            leftIcon={<Send className="h-3.5 w-3.5" />}
-                            title="Overwrite this Pi's config.json with your local machine's config"
-                          >
-                            Push Local Config
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={async () => {
-                              try {
-                                await onLogoutTarget(target.id);
-                                notify('info', `Signed out of ${target.name}`);
-                              } catch (err) {
-                                notify(
-                                  'error',
-                                  'Sign out failed',
-                                  err instanceof Error ? err.message : undefined
-                                );
-                              }
-                            }}
-                            leftIcon={<LogOut className="h-3.5 w-3.5" />}
-                          >
-                            Sign Out
-                          </Button>
-                        </>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              await onLogoutTarget(target.id);
+                              notify('info', `Signed out of ${target.name}`);
+                            } catch (err) {
+                              notify(
+                                'error',
+                                'Sign out failed',
+                                err instanceof Error ? err.message : undefined
+                              );
+                            }
+                          }}
+                          leftIcon={<LogOut className="h-3.5 w-3.5" />}
+                        >
+                          Sign Out
+                        </Button>
                       ) : (
                         <Button
                           variant="secondary"
@@ -366,8 +410,8 @@ export function DevicesPage({
       <GitUpdateCard
         activeTarget={activeTarget}
         enabled={targetDataEnabled}
-        onApiError={onApiError}
-        onRepoUpdated={onRepoUpdated}
+        gitUpdates={gitUpdates}
+        onPullAndRestart={handlePullAndRestart}
       />
 
       {/* Add Remote Device + Pi Setup Guide */}
@@ -535,37 +579,6 @@ cat deploy/systemd/README.md`}
           {loginError && <p className="text-xs text-rose-400">{loginError}</p>}
         </form>
       </Modal>
-
-      {/* Push Local Config Confirm */}
-      <ConfirmDialog
-        open={Boolean(pushConfirmTarget)}
-        onClose={() => setPushConfirmTarget(null)}
-        onConfirm={async () => {
-          if (!pushConfirmTarget) return;
-          setPushing(true);
-          try {
-            await onPushLocalConfig(pushConfirmTarget.id);
-            notify(
-              'success',
-              `Pushed local config to ${pushConfirmTarget.name}`,
-              'The remote Pi saved and hot-reloaded your local config.json.'
-            );
-            setPushConfirmTarget(null);
-          } catch (err) {
-            notify(
-              'error',
-              'Push failed',
-              err instanceof Error ? err.message : 'Unable to push config.'
-            );
-          } finally {
-            setPushing(false);
-          }
-        }}
-        title={`Push local config to ${pushConfirmTarget?.name ?? 'remote Pi'}?`}
-        description="This overwrites the remote device's config.json with your local machine's saved config.json and triggers a live hot-reload."
-        confirmLabel="Push Config"
-        loading={pushing}
-      />
 
       {/* Delete Device Confirm */}
       <ConfirmDialog

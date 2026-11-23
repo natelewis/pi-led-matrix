@@ -187,22 +187,6 @@ export function useTargets({ enabled, onLocalUnauthorized }: UseTargetsOptions) 
     [onLocalUnauthorized, applyTargetsState]
   );
 
-  const pushLocalConfig = useCallback(
-    async (id: string) => {
-      try {
-        return await api.targets.pushConfig(id);
-      } catch (err) {
-        if (err instanceof ApiError && err.remoteAuthRequired) {
-          void refresh();
-        } else {
-          onLocalUnauthorized?.(err);
-        }
-        throw err;
-      }
-    },
-    [onLocalUnauthorized, refresh]
-  );
-
   return {
     targets: state.targets,
     activeTargetId: state.activeTargetId,
@@ -224,7 +208,6 @@ export function useTargets({ enabled, onLocalUnauthorized }: UseTargetsOptions) 
     removeTarget,
     loginTarget,
     logoutTarget,
-    pushLocalConfig,
     handleApiError,
   };
 }

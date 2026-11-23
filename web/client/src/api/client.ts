@@ -376,11 +376,6 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({}),
       }),
-    pushConfig: (id: string) =>
-      request<{ ok: boolean }>(`/api/targets/${encodeURIComponent(id)}/push-config`, {
-        method: 'POST',
-        body: JSON.stringify({}),
-      }),
   },
 
   system: {

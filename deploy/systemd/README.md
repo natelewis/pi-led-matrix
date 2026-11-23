@@ -43,3 +43,35 @@ journalctl -u pi-led-matrix-web -f
 6. Connect from LED Matrix Studio on your Mac:
    - Open **Devices & Remote** in your local Mac Studio.
    - Add your Pi (e.g. `http://raspberrypi.local:8080` or `http://192.168.1.x:8080`), sign in, and switch to it.
+
+## Raspberry Pi Desktop / HDMI Virtual Display (`virtual: true`)
+
+If your Raspberry Pi displays the matrix fullscreen on an attached HDMI screen via Pygame (rather than root-only GPIO NeoPixels), run `pi-led-matrix-web.service` as your desktop user (e.g. `nlewis`) and pass the desktop session display variables so Pygame can take over the screen:
+
+```ini
+[Unit]
+Description=Raspberry Pi LED Matrix Studio Web Server
+After=network-online.target graphical.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nlewis
+Group=nlewis
+UMask=0002
+WorkingDirectory=/home/nlewis/pi-led-matrix
+ExecStart=/home/nlewis/pi-led-matrix/.venv/bin/python -m web.server.app --host 0.0.0.0 --port 8080
+Restart=on-failure
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=WAYLAND_DISPLAY=wayland-1
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/nlewis/.Xauthority
+EnvironmentFile=/etc/pi-led-matrix-web.env
+
+[Install]
+WantedBy=multi-user.target
+```
+
+> **Tip:** Check `ls /run/user/$(id -u)/wayland*` on your Pi to confirm whether Wayfire/labwc is using `wayland-0` or `wayland-1`, and ensure `/etc/pi-led-matrix-web.env` and `_runtime/` are owned by your desktop user.

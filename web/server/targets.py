@@ -452,53 +452,6 @@ class TargetManager:
             "target": self._public_target({**entry, "sessionToken": ""}),
         }
 
-    def push_config_to_target(
-        self, target_id: str, config: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        entry = self.get_target(target_id)
-        if not entry:
-            raise ValueError(f"Unknown target '{target_id}'.")
-        token = entry.get("sessionToken", "")
-        if not token:
-            raise PermissionError(f"Sign in to '{entry['name']}' before pushing config.")
-
-        body = json.dumps({"config": config}, allow_nan=False).encode("utf-8")
-        conn, netloc = _open_connection(entry["url"], timeout=PROXY_CONNECT_TIMEOUT)
-        try:
-            conn.request(
-                "PUT",
-                "/api/config",
-                body=body,
-                headers={
-                    "Host": netloc,
-                    "Origin": entry["url"],
-                    "X-Led-Matrix-Proxy": "1",
-                    "Content-Type": "application/json",
-                    "Content-Length": str(len(body)),
-                    "Cookie": f"{SESSION_COOKIE_NAME}={token}",
-                },
-            )
-            resp = conn.getresponse()
-            raw = resp.read(MAX_CONTROL_RESP_BYTES)
-            parsed: Dict[str, Any] = {}
-            try:
-                parsed = json.loads(raw.decode("utf-8"))
-            except (UnicodeDecodeError, json.JSONDecodeError):
-                pass
-            if resp.status == 401:
-                self.clear_target_session(target_id, expected_token=token)
-                raise PermissionError(
-                    f"Session expired on '{entry['name']}'. Please sign in again."
-                )
-            if resp.status >= 400:
-                err_msg = parsed.get("error") or f"Remote save failed (HTTP {resp.status})."
-                raise RemoteRequestError(str(err_msg), status=resp.status)
-            return parsed
-        except (OSError, http.client.HTTPException) as exc:
-            raise RemoteUnreachableError(f"Could not reach {entry['url']}: {exc}") from exc
-        finally:
-            conn.close()
-
     def proxy_request(
         self,
         target: Dict[str, Any],

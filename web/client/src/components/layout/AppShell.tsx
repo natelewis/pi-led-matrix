@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import {
+  ArrowDownToLine,
   Grid3X3,
   LogOut,
   Menu,
@@ -22,6 +23,7 @@ export interface AppShellProps {
   onSelectTarget: (targetId: string) => void;
   source: 'custom' | 'default';
   playlistCount: number;
+  updatesAvailable?: number;
   dimensionsLabel: string;
   isDirty: boolean;
   saving: boolean;
@@ -41,6 +43,7 @@ export function AppShell({
   onSelectTarget,
   source,
   playlistCount,
+  updatesAvailable = 0,
   dimensionsLabel,
   isDirty,
   saving,
@@ -94,6 +97,15 @@ export function AppShell({
                 }`}
               >
                 {playlistCount}
+              </span>
+            )}
+            {item.id === 'devices' && updatesAvailable > 0 && (
+              <span
+                className="inline-flex items-center gap-0.5 rounded-full border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-amber-300"
+                title={`${updatesAvailable} git update${updatesAvailable === 1 ? '' : 's'} available on ${activeTarget.name}`}
+              >
+                <ArrowDownToLine className="h-2.5 w-2.5" />
+                {updatesAvailable}
               </span>
             )}
           </button>
@@ -207,6 +219,19 @@ export function AppShell({
               <Badge tone={source === 'custom' ? 'emerald' : 'amber'}>
                 {source === 'custom' ? 'Custom config.json' : 'Default config'}
               </Badge>
+              {updatesAvailable > 0 && (
+                <button
+                  type="button"
+                  onClick={() => handleSelect('devices')}
+                  className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/15 px-2.5 py-0.5 text-[11px] font-medium text-amber-200 transition hover:bg-amber-500/25 cursor-pointer"
+                  title={`Open Devices & Remote to pull ${updatesAvailable} update${updatesAvailable === 1 ? '' : 's'} on ${activeTarget.name}`}
+                >
+                  <ArrowDownToLine className="h-3 w-3 text-amber-300" />
+                  <span>
+                    {updatesAvailable} update{updatesAvailable === 1 ? '' : 's'} available
+                  </span>
+                </button>
+              )}
               {isDirty && (
                 <Badge tone="cyan" className="animate-pulse">
                   Unsaved changes

@@ -6,6 +6,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { NAV_ITEMS } from '@/components/layout/navItems';
 import { Button, ErrorBoundary, ToastProvider, useToast } from '@/components/ui';
 import { useAuth } from '@/hooks/useAuth';
+import { useGitUpdates } from '@/hooks/useGitUpdates';
 import { useMatrixConfig } from '@/hooks/useMatrixConfig';
 import { usePlayback } from '@/hooks/usePlayback';
 import { useTargets } from '@/hooks/useTargets';
@@ -56,6 +57,24 @@ function MatrixStudioApp() {
     enabled: targetDataEnabled,
     targetKey: targets.activeTargetId,
     onUnauthorized: targets.handleApiError,
+  });
+
+  const gitUpdates = useGitUpdates({
+    enabled: targetDataEnabled,
+    targetId: targets.activeTargetId,
+    targetName: targets.activeTarget.name,
+    isPlaying: playback.status.running,
+    onApiError: targets.handleApiError,
+    onRepoUpdated: () => {
+      void matrix.reloadEffects();
+      if (!matrix.isDirty) {
+        void matrix.reload();
+      }
+    },
+    onBouncePlayback: async () => {
+      await playback.stop();
+      await playback.start();
+    },
   });
 
   useEffect(() => {
@@ -217,6 +236,7 @@ function MatrixStudioApp() {
       onSelectTarget={(id) => void handleSelectTarget(id)}
       source={matrix.source}
       playlistCount={matrix.draft?.playlist.length ?? 0}
+      updatesAvailable={gitUpdates.updatesAvailable}
       dimensionsLabel={dimensionsLabel}
       isDirty={Boolean(matrix.draft) && matrix.isDirty}
       saving={matrix.saving}
@@ -251,20 +271,13 @@ function MatrixStudioApp() {
           activeTargetId={targets.activeTargetId}
           targetDataEnabled={targetDataEnabled}
           switching={targets.switching}
+          gitUpdates={gitUpdates}
           onSyncTargetsState={targets.applyTargetsState}
           onSelectTarget={handleSelectTarget}
           onAddTarget={targets.addTarget}
           onRemoveTarget={targets.removeTarget}
           onLoginTarget={targets.loginTarget}
           onLogoutTarget={targets.logoutTarget}
-          onPushLocalConfig={targets.pushLocalConfig}
-          onApiError={targets.handleApiError}
-          onRepoUpdated={() => {
-            void matrix.reloadEffects();
-            if (!matrix.isDirty) {
-              void matrix.reload();
-            }
-          }}
         />
       ) : section === 'security' ? (
         <SecurityPage

@@ -478,7 +478,7 @@ class WebServerTestCase(unittest.TestCase):
             )
         self.assertEqual(last_status, 429)
 
-    def test_remote_target_proxy_frame_mirror_and_push_config(self) -> None:
+    def test_remote_target_proxy_and_frame_mirror(self) -> None:
         import struct
 
         # Spin up a second isolated server acting as a remote Raspberry Pi
@@ -614,19 +614,7 @@ class WebServerTestCase(unittest.TestCase):
                 )
                 self.assertEqual(status, 400)
 
-                # 8. Push Local Config -> Remote Pi overwrites remote config with local defaults
-                status, _, push_res = self._request(
-                    "POST",
-                    f"/api/targets/{target_id}/push-config",
-                    {},
-                    cookie=local_cookie,
-                )
-                self.assertEqual(status, 200)
-                self.assertTrue(push_res["ok"])
-                reloaded_remote = json.loads((remote_dir / "config.json").read_text(encoding="utf-8"))
-                self.assertAlmostEqual(reloaded_remote["brightness"], 0.2)
-
-                # 9. Deleting active remote target falls back cleanly to local
+                # 8. Deleting active remote target falls back cleanly to local
                 status, _, del_res = self._request(
                     "DELETE", f"/api/targets/{target_id}", cookie=local_cookie
                 )
@@ -786,6 +774,13 @@ class WebServerTestCase(unittest.TestCase):
                 self.assertEqual(status, 200)
                 self.assertTrue(restart_res["restarting"])
                 self.assertTrue(restarted.is_set())
+
+                # Env-managed Pi persisted its session_secret so cookies survive restarts
+                auth_data = json.loads(
+                    (pi_dir / "web" / ".auth.json").read_text(encoding="utf-8")
+                )
+                self.assertTrue(auth_data.get("session_secret"))
+                self.assertEqual(auth_data.get("password_hash"), "")
             finally:
                 pi_server.shutdown()
                 pi_server.server_close()
