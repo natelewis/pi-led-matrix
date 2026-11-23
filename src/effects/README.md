@@ -73,7 +73,15 @@ Simple snow effect.
 
 ## snow_flakes
 
-Complex snow flakes using animated sprites and shimmering brightness.
+Swirling 6-fold crystalline snowflakes drifting across three parallax depth layers over a moonlit winter sky with gentle wind gusts, specular ice glints, and an accumulating bottom snowdrift.
+
+![Snow Flakes Effect Preview](snow_flakes/preview.png)
+
+Optional config keys: `speed` (`0.2`–`3.0`), `wind` (`0.0`–`3.0`), `density` (`0.3`–`2.5`), `drift` (`true`/`false`), and `palette` (`"winter"`, `"aurora"`, or `"warm"`).
+
+```bash
+make run effect=snow_flakes config='{"palette":"aurora","wind":1.5,"drift":true}'
+```
 
 ## rgb_test
 
