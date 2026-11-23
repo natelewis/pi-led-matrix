@@ -8,6 +8,7 @@ from typing import Any, Dict, List
 
 
 EFFECT_CATEGORIES: Dict[str, str] = {
+    "aurora": "animation",
     "broadway": "animation",
     "eye": "animation",
     "futbol": "game",
