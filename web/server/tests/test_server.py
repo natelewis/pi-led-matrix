@@ -227,11 +227,33 @@ class WebServerTestCase(unittest.TestCase):
         status, _, _ = self._request("GET", f"/api/effects/image/file?{bad_qs}", cookie=cookie)
         self.assertEqual(status, 400)
 
-        # Deleting a non-_uploads file is rejected
-        (self.tmpdir / "src" / "effects" / "image" / "root.png").write_bytes(png_bytes)
-        root_qs = urllib.parse.urlencode({"file": "root.png"})
-        status, _, _ = self._request("DELETE", f"/api/effects/image/file?{root_qs}", cookie=cookie)
+        # Deleting a non-media file (e.g. effect.py) is rejected
+        bad_del_qs = urllib.parse.urlencode({"file": "effect.py"})
+        status, _, _ = self._request(
+            "DELETE", f"/api/effects/image/file?{bad_del_qs}", cookie=cookie
+        )
         self.assertEqual(status, 400)
+
+        # Hidden macOS AppleDouble dotfiles are excluded from media listing
+        (self.tmpdir / "src" / "effects" / "image" / "._hidden.png").write_bytes(png_bytes)
+        status, _, listed_after_hidden = self._request(
+            "GET", "/api/effects/image/files", cookie=cookie
+        )
+        self.assertEqual(status, 200)
+        self.assertFalse(
+            any(item["name"].startswith(".") for item in listed_after_hidden["files"])
+        )
+
+        # Deleting a root-level media image in src/effects/image/ succeeds
+        root_img = self.tmpdir / "src" / "effects" / "image" / "root.png"
+        root_img.write_bytes(png_bytes)
+        root_qs = urllib.parse.urlencode({"file": "root.png"})
+        status, _, root_del = self._request(
+            "DELETE", f"/api/effects/image/file?{root_qs}", cookie=cookie
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(root_del["deleted"], "root.png")
+        self.assertFalse(root_img.is_file())
 
         # Deleting the uploaded file succeeds
         status, _, del_resp = self._request(
