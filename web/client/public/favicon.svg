@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="70%">
+      <stop offset="0%" stop-color="#151c2a"/>
+      <stop offset="100%" stop-color="#090b10"/>
+    </radialGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="1.4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#bg)" stroke="#263248" stroke-width="2"/>
+
+  <!-- 4x4 LED Matrix Dots -->
+  <g filter="url(#glow)">
+    <!-- Row 1 -->
+    <circle cx="17" cy="17" r="4.2" fill="#22d3ee"/>
+    <circle cx="27" cy="17" r="4.2" fill="#38bdf8"/>
+    <circle cx="37" cy="17" r="4.2" fill="#818cf8"/>
+    <circle cx="47" cy="17" r="4.2" fill="#c084fc"/>
+
+    <!-- Row 2 -->
+    <circle cx="17" cy="27" r="4.2" fill="#34d399"/>
+    <circle cx="27" cy="27" r="4.2" fill="#22d3ee"/>
+    <circle cx="37" cy="27" r="4.2" fill="#a78bfa"/>
+    <circle cx="47" cy="27" r="4.2" fill="#f472b6"/>
+
+    <!-- Row 3 -->
+    <circle cx="17" cy="37" r="4.2" fill="#10b981"/>
+    <circle cx="27" cy="37" r="4.2" fill="#34d399"/>
+    <circle cx="37" cy="37" r="4.2" fill="#fb7185"/>
+    <circle cx="47" cy="37" r="4.2" fill="#f59e0b"/>
+
+    <!-- Row 4 -->
+    <circle cx="17" cy="47" r="4.2" fill="#1e293b"/>
+    <circle cx="27" cy="47" r="4.2" fill="#22d3ee"/>
+    <circle cx="37" cy="47" r="4.2" fill="#fbbf24"/>
+    <circle cx="47" cy="47" r="4.2" fill="#fde047"/>
+  </g>
+</svg>

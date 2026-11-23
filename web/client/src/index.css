@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --color-surface-950: #090b10;
+  --color-surface-900: #0f131b;
+  --color-surface-850: #141925;
+  --color-surface-800: #1a2130;
+  --color-surface-700: #252f42;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--color-surface-950);
+    color: #f1f5f9;
+  }
+
+  /* Custom sleek scrollbars */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #252f42;
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #334155;
+  }
+}
+
+/* Custom range slider styling */
+input[type="range"].led-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+input[type="range"].led-slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: #1e293b;
+}
+
+input[type="range"].led-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -5px;
+  height: 16px;
+  width: 16px;
+  border-radius: 999px;
+  background: #22d3ee;
+  border: 2px solid #0f131b;
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.18);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+input[type="range"].led-slider:hover::-webkit-slider-thumb {
+  transform: scale(1.1);
+  box-shadow: 0 0 0 5px rgba(34, 211, 238, 0.25);
+}
+
+input[type="range"].led-slider::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: #1e293b;
+}
+
+input[type="range"].led-slider::-moz-range-thumb {
+  height: 16px;
+  width: 16px;
+  border-radius: 999px;
+  background: #22d3ee;
+  border: 2px solid #0f131b;
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.18);
+}

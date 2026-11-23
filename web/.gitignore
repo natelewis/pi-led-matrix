@@ -1,0 +1,12 @@
+# Web dashboard artifacts & local secrets
+.auth.json
+client/node_modules/
+client/dist/
+client/tsconfig.tsbuildinfo
+server/__pycache__/
+server/tests/__pycache__/
+*.pyc
+!__init__.py
+!server/__init__.py
+!server/tests/__init__.py
+!docs/screenshots/*.png

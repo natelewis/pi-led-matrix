@@ -49,3 +49,17 @@ lint:
 
 lint-fix:
 	@ ./.venv/bin/black .
+
+web-build:
+	@cd web/client && npm install && npm run build
+
+web:
+	@python3 -m web.server.app --host $${LED_MATRIX_WEB_HOST:-0.0.0.0} --port $${LED_MATRIX_WEB_PORT:-8080}
+
+web-dev:
+	@trap 'kill 0' INT TERM EXIT; \
+	python3 -m web.server.app --host 127.0.0.1 --port 8080 --reload & \
+	cd web/client && npm run dev
+
+web-test:
+	@python3 -m unittest discover -s web/server/tests -t . -v
