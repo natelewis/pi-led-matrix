@@ -87,7 +87,7 @@ def discover_effect_media(
         if uploads_dir.is_dir():
             upload_entries: List[tuple[float, str]] = []
             for p in uploads_dir.iterdir():
-                if p.suffix.lower() not in extensions:
+                if p.name.startswith(".") or p.suffix.lower() not in extensions:
                     continue
                 try:
                     if not p.is_file():
@@ -101,7 +101,7 @@ def discover_effect_media(
 
     root_entries: List[str] = []
     for p in effect_dir.iterdir():
-        if p.suffix.lower() not in extensions:
+        if p.name.startswith(".") or p.suffix.lower() not in extensions:
             continue
         try:
             if p.is_file():

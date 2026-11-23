@@ -13,6 +13,7 @@ import { api } from '@/api/client';
 import {
   Badge,
   Button,
+  ConfirmDialog,
   Field,
   Input,
   Modal,
@@ -108,6 +109,11 @@ export function EffectConfigModal({
   const [loadingVideos, setLoadingVideos] = useState(false);
 
   const [deletingFile, setDeletingFile] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{
+    kind: 'image' | 'video';
+    file: string;
+    name: string;
+  } | null>(null);
 
   const previewCommand = useMemo(() => {
     if (!item) return '';
@@ -253,9 +259,13 @@ export function EffectConfigModal({
   };
 
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
+    <>
+      <Modal
+        open={open}
+        onClose={() => {
+          setConfirmDelete(null);
+          onClose();
+        }}
       title={`Configure ${effectMeta?.label ?? item.effect}`}
       description={
         schema === 'none'
@@ -570,35 +580,23 @@ export function EffectConfigModal({
                                   image
                                 </Badge>
                               )}
-                              {img.uploaded && (
-                                <button
-                                  type="button"
-                                  disabled={deletingFile === img.file}
-                                  title="Delete uploaded image"
-                                  onClick={async (e) => {
-                                    e.stopPropagation();
-                                    setDeletingFile(img.file);
-                                    try {
-                                      const res = await api.effects.image.deleteFile(img.file);
-                                      setImageFiles(res.files);
-                                      if (fileName === img.file) setFileName('');
-                                      onEffectsChanged?.();
-                                      notify('info', 'Deleted uploaded image', img.name);
-                                    } catch (err) {
-                                      notify(
-                                        'error',
-                                        'Delete failed',
-                                        err instanceof Error ? err.message : 'Unable to delete.'
-                                      );
-                                    } finally {
-                                      setDeletingFile(null);
-                                    }
-                                  }}
-                                  className="rounded p-1 text-slate-500 hover:bg-rose-500/15 hover:text-rose-300 cursor-pointer"
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </button>
-                              )}
+                              <button
+                                type="button"
+                                disabled={deletingFile === img.file}
+                                title={`Delete ${img.name}`}
+                                aria-label={`Delete ${img.name}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setConfirmDelete({
+                                    kind: 'image',
+                                    file: img.file,
+                                    name: img.name,
+                                  });
+                                }}
+                                className="rounded p-1 text-slate-400 transition-colors hover:bg-rose-500/15 hover:text-rose-300 cursor-pointer"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -755,35 +753,23 @@ export function EffectConfigModal({
                                   </span>
                                 )}
                               </div>
-                              {vid.uploaded && (
-                                <button
-                                  type="button"
-                                  disabled={deletingFile === vid.file}
-                                  title="Delete uploaded video"
-                                  onClick={async (e) => {
-                                    e.stopPropagation();
-                                    setDeletingFile(vid.file);
-                                    try {
-                                      const res = await api.effects.video.deleteFile(vid.file);
-                                      setVideoFiles(res.files);
-                                      if (fileName === vid.file) setFileName('');
-                                      onEffectsChanged?.();
-                                      notify('info', 'Deleted uploaded video', vid.name);
-                                    } catch (err) {
-                                      notify(
-                                        'error',
-                                        'Delete failed',
-                                        err instanceof Error ? err.message : 'Unable to delete.'
-                                      );
-                                    } finally {
-                                      setDeletingFile(null);
-                                    }
-                                  }}
-                                  className="rounded p-1 text-slate-500 hover:bg-rose-500/15 hover:text-rose-300 cursor-pointer"
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </button>
-                              )}
+                              <button
+                                type="button"
+                                disabled={deletingFile === vid.file}
+                                title={`Delete ${vid.name}`}
+                                aria-label={`Delete ${vid.name}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setConfirmDelete({
+                                    kind: 'video',
+                                    file: vid.file,
+                                    name: vid.name,
+                                  });
+                                }}
+                                className="rounded p-1 text-slate-400 transition-colors hover:bg-rose-500/15 hover:text-rose-300 cursor-pointer"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -866,6 +852,43 @@ export function EffectConfigModal({
           </pre>
         </div>
       </div>
-    </Modal>
+      </Modal>
+
+      <ConfirmDialog
+        open={Boolean(confirmDelete)}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={async () => {
+          if (!confirmDelete) return;
+          const target = confirmDelete;
+          setDeletingFile(target.file);
+          try {
+            if (target.kind === 'image') {
+              const res = await api.effects.image.deleteFile(target.file);
+              setImageFiles(res.files);
+            } else {
+              const res = await api.effects.video.deleteFile(target.file);
+              setVideoFiles(res.files);
+            }
+            if (fileName === target.file) setFileName('');
+            onEffectsChanged?.();
+            notify('info', `Deleted ${target.kind}`, target.name);
+            setConfirmDelete(null);
+          } catch (err) {
+            notify(
+              'error',
+              'Delete failed',
+              err instanceof Error ? err.message : 'Unable to delete file.'
+            );
+          } finally {
+            setDeletingFile(null);
+          }
+        }}
+        title={`Delete ${confirmDelete?.name ?? 'file'}?`}
+        description={`This permanently removes ${confirmDelete?.file ?? 'this file'} from the active device. Any playlist entries referencing it will need another file selected.`}
+        confirmLabel={`Delete ${confirmDelete?.kind === 'video' ? 'Video' : 'Image'}`}
+        danger
+        loading={Boolean(deletingFile)}
+      />
+    </>
   );
 }

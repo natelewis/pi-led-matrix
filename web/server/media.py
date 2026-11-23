@@ -109,7 +109,7 @@ def _iter_media_files(directory: Path, allowed_extensions: set[str]) -> List[Tup
         return []
     entries: List[Tuple[Path, os.stat_result]] = []
     for entry in directory.iterdir():
-        if entry.suffix.lower() not in allowed_extensions:
+        if entry.name.startswith(".") or entry.suffix.lower() not in allowed_extensions:
             continue
         try:
             if not entry.is_file():
@@ -223,7 +223,7 @@ class ImageMediaStore:
         }
 
     def delete_upload(self, rel_file: str) -> bool:
-        target = self.resolve_image_path(rel_file, uploads_only=True)
+        target = self.resolve_image_path(rel_file, uploads_only=False)
         with self._lock:
             if not target.is_file():
                 return False
@@ -489,7 +489,7 @@ class VideoMediaStore:
             tmp_output.unlink(missing_ok=True)
 
     def delete_upload(self, rel_file: str) -> bool:
-        target = self.resolve_video_path(rel_file, uploads_only=True)
+        target = self.resolve_video_path(rel_file, uploads_only=False)
         with self._lock:
             if not target.is_file():
                 return False
