@@ -289,13 +289,18 @@ export function DevicesPage({
                       {active && (
                         <Badge tone={target.isLocal ? 'cyan' : 'violet'}>Active</Badge>
                       )}
-                      {active && gitUpdates.updatesAvailable > 0 && (
+                      {active && gitUpdates.updatesAvailable > 0 ? (
                         <Badge tone="amber">
                           <ArrowDownToLine className="h-3 w-3" />
                           {gitUpdates.updatesAvailable} update
                           {gitUpdates.updatesAvailable === 1 ? '' : 's'}
                         </Badge>
-                      )}
+                      ) : active &&
+                        targetDataEnabled &&
+                        gitUpdates.status?.isGitRepo &&
+                        gitUpdates.status.behind === 0 ? (
+                        <Badge tone="emerald">Up to date</Badge>
+                      ) : null}
                       {!target.isLocal && (
                         <Badge tone={target.hasSession ? 'emerald' : 'amber'}>
                           {target.hasSession ? 'Signed in' : 'Locked'}
@@ -330,9 +335,10 @@ export function DevicesPage({
                   {active &&
                     targetDataEnabled &&
                     gitUpdates.status?.isGitRepo &&
-                    !gitUpdates.status.detached && (
+                    !gitUpdates.status.detached &&
+                    gitUpdates.updatesAvailable > 0 && (
                       <Button
-                        variant={gitUpdates.updatesAvailable > 0 ? 'primary' : 'secondary'}
+                        variant="primary"
                         size="sm"
                         loading={gitUpdates.updating}
                         disabled={gitUpdates.status.dirty || gitUpdates.restarting}
@@ -341,12 +347,10 @@ export function DevicesPage({
                         title={
                           gitUpdates.status.dirty
                             ? 'Commit or discard tracked local changes before pulling'
-                            : 'Fast-forward git pull and restart the server automatically'
+                            : 'Fast-forward git pull, rebuild changed dependencies, and restart'
                         }
                       >
-                        {gitUpdates.updatesAvailable > 0
-                          ? `Pull & Restart (${gitUpdates.updatesAvailable})`
-                          : 'Pull & Restart'}
+                        Pull &amp; Restart ({gitUpdates.updatesAvailable})
                       </Button>
                     )}
 
