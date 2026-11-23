@@ -75,15 +75,18 @@ export function GitUpdateCard({
     Boolean(status?.isGitRepo) &&
     !status?.detached &&
     !status?.dirty &&
+    (updatesAvailable > 0 || status?.behind === null) &&
     !updating &&
     !restarting;
 
   const pullButtonLabel =
     updatesAvailable > 0
       ? `Pull & Restart (${updatesAvailable})`
-      : status?.canRestart
-        ? 'Pull & Restart'
-        : 'Pull Latest';
+      : status?.behind === 0
+        ? 'Up to Date'
+        : status?.canRestart
+          ? 'Pull & Restart'
+          : 'Pull Latest';
 
   return (
     <Card>
@@ -108,12 +111,18 @@ export function GitUpdateCard({
                 Check Updates
               </Button>
               <Button
-                variant="primary"
+                variant={updatesAvailable > 0 ? 'primary' : 'secondary'}
                 size="sm"
                 loading={updating}
                 disabled={!canPull}
                 onClick={() => void onPullAndRestart()}
-                leftIcon={<ArrowDownToLine className="h-3.5 w-3.5" />}
+                leftIcon={
+                  updatesAvailable === 0 && status?.behind === 0 ? (
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                  ) : (
+                    <ArrowDownToLine className="h-3.5 w-3.5" />
+                  )
+                }
               >
                 {pullButtonLabel}
               </Button>
