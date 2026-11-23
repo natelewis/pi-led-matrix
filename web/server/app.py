@@ -664,8 +664,12 @@ class AppContext:
         def system_git_pull(
             req: MatrixRequestHandler, _params: Dict[str, str]
         ) -> None:
+            body = req.read_json_body()
+            if body is None:
+                return
+            auto_rebuild = bool(body.get("autoRebuild", True))
             try:
-                result = self.git_updater.pull()
+                result = self.git_updater.pull(auto_rebuild=auto_rebuild)
             except GitOperationError as exc:
                 req.send_json({"error": str(exc)}, status=HTTPStatus(exc.status))
                 return

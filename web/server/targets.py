@@ -25,7 +25,7 @@ from urllib.parse import urlparse
 LOCAL_TARGET_ID = "local"
 SESSION_COOKIE_NAME = "led_matrix_session"
 PROXY_CONNECT_TIMEOUT = 8.0
-PROXY_GIT_TIMEOUT = 45.0
+PROXY_GIT_TIMEOUT = 300.0
 PROXY_UPLOAD_TIMEOUT = 310.0
 TEST_TIMEOUT = 4.0
 MAX_CONTROL_RESP_BYTES = 1_048_576  # 1 MiB cap for control/auth responses

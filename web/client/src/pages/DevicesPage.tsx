@@ -91,6 +91,9 @@ export function DevicesPage({
         return;
       }
       const extras: string[] = [];
+      if (outcome.pull.rebuilt) {
+        extras.push('rebuilt dependencies');
+      }
       if (outcome.serverRestarted) {
         extras.push(outcome.serverBackOnline ? 'server restarted' : 'server restarting');
       }
@@ -98,8 +101,10 @@ export function DevicesPage({
         extras.push('playlist reloaded');
       }
       notify(
-        'success',
-        `Updated ${activeTarget.name} (${outcome.pull.beforeCommit} → ${outcome.pull.afterCommit})`,
+        outcome.pull.rebuildFailed ? 'error' : 'success',
+        outcome.pull.rebuildFailed
+          ? `Pulled ${activeTarget.name}, but a rebuild step failed`
+          : `Updated ${activeTarget.name} (${outcome.pull.beforeCommit} → ${outcome.pull.afterCommit})`,
         extras.length > 0
           ? `${outcome.pull.totalChangedFiles} file${
               outcome.pull.totalChangedFiles === 1 ? '' : 's'

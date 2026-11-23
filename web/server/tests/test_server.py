@@ -781,6 +781,48 @@ class WebServerTestCase(unittest.TestCase):
                 )
                 self.assertTrue(auth_data.get("session_secret"))
                 self.assertEqual(auth_data.get("password_hash"), "")
+
+                # Conditional rebuild runs pip + npm when requirements.txt & web/client/ change
+                (dev_dir / "requirements.txt").write_text("# reqs\n", encoding="utf-8")
+                (dev_dir / "web" / "client").mkdir(parents=True, exist_ok=True)
+                (dev_dir / "web" / "client" / "package.json").write_text(
+                    '{"name":"client"}\n', encoding="utf-8"
+                )
+                run_git(dev_dir, "add", ".")
+                run_git(dev_dir, "commit", "-m", "update python and frontend deps")
+                run_git(dev_dir, "push", "origin", "main")
+
+                # Simulate an existing frontend install on the target
+                (pi_dir / "web" / "client" / "node_modules").mkdir(
+                    parents=True, exist_ok=True
+                )
+                ran_cmds: list[list[str]] = []
+
+                def fake_run_tool(cmd, *, cwd, timeout=240.0, extra_env=None):
+                    ran_cmds.append(list(cmd))
+                    return True, "ok"
+
+                orig_run_tool = pi_server.app_ctx.git_updater._run_tool
+                pi_server.app_ctx.git_updater._run_tool = fake_run_tool
+                try:
+                    status, _, rebuild_pull = self._request(
+                        "POST", "/api/system/git-pull", {}, cookie=local_cookie
+                    )
+                finally:
+                    pi_server.app_ctx.git_updater._run_tool = orig_run_tool
+
+                self.assertEqual(status, 200)
+                self.assertTrue(rebuild_pull["updated"])
+                self.assertTrue(rebuild_pull["pythonDepsChanged"])
+                self.assertTrue(rebuild_pull["nodeDepsChanged"])
+                self.assertTrue(rebuild_pull["rebuilt"])
+                self.assertFalse(rebuild_pull["rebuildFailed"])
+                step_names = [s["name"] for s in rebuild_pull["rebuildSteps"]]
+                self.assertIn("python-deps", step_names)
+                if shutil.which("npm"):
+                    self.assertIn("node-deps", step_names)
+                    self.assertIn("frontend-build", step_names)
+                self.assertTrue(any("pip" in cmd for cmd in ran_cmds))
             finally:
                 pi_server.shutdown()
                 pi_server.server_close()

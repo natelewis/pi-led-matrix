@@ -91,8 +91,8 @@ export function GitUpdateCard({
         title={`Repository & Software Updates — ${activeTarget.name}`}
         description={
           activeTarget.isLocal
-            ? 'Automatically checks for new commits on this branch and lets you fast-forward pull & restart in one click.'
-            : `Automatically checks for new commits on ${activeTarget.name} and lets you pull & restart headlessly.`
+            ? 'Automatically checks for new commits, pulls, rebuilds changed Python/UI dependencies, and restarts.'
+            : `Automatically checks for new commits on ${activeTarget.name}, pulls, installs changed dependencies, and restarts headlessly.`
         }
         action={
           enabled && (
@@ -235,7 +235,13 @@ export function GitUpdateCard({
             )}
 
             {lastPull && (
-              <div className="space-y-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2.5 text-xs text-emerald-100">
+              <div
+                className={`space-y-2 rounded-xl border px-3.5 py-2.5 text-xs ${
+                  lastPull.rebuildFailed
+                    ? 'border-amber-500/35 bg-amber-500/10 text-amber-100'
+                    : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
+                }`}
+              >
                 <div className="font-medium">
                   {lastPull.updated
                     ? `Updated ${lastPull.beforeCommit} → ${lastPull.afterCommit} (${lastPull.totalChangedFiles} file${
@@ -243,6 +249,28 @@ export function GitUpdateCard({
                       })`
                     : 'Already up to date.'}
                 </div>
+                {lastPull.rebuildSteps && lastPull.rebuildSteps.length > 0 && (
+                  <div className="space-y-1 rounded-lg bg-surface-950/60 p-2 text-[11px]">
+                    {lastPull.rebuildSteps.map((step) => (
+                      <div key={step.name} className="flex items-start gap-2">
+                        <Badge
+                          tone={
+                            step.status === 'ok'
+                              ? 'emerald'
+                              : step.status === 'failed'
+                                ? 'rose'
+                                : 'neutral'
+                          }
+                        >
+                          {step.name}
+                        </Badge>
+                        <span className="whitespace-pre-wrap text-slate-300">
+                          {step.detail}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {lastPull.changedFiles.length > 0 && (
                   <div className="max-h-28 overflow-y-auto rounded-lg bg-surface-950/70 p-2 font-mono text-[11px] text-slate-300">
                     {lastPull.changedFiles.map((file) => (

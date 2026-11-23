@@ -183,6 +183,12 @@ export interface GitStatusResponse {
   canRestart?: boolean;
 }
 
+export interface GitRebuildStep {
+  name: string;
+  status: 'ok' | 'skipped' | 'failed';
+  detail: string;
+}
+
 export interface GitPullResponse {
   updated: boolean;
   beforeCommit: string;
@@ -192,6 +198,11 @@ export interface GitPullResponse {
   serverFilesChanged: boolean;
   clientFilesChanged: boolean;
   playbackFilesChanged: boolean;
+  pythonDepsChanged?: boolean;
+  nodeDepsChanged?: boolean;
+  rebuildSteps?: GitRebuildStep[];
+  rebuilt?: boolean;
+  rebuildFailed?: boolean;
   output: string;
   status: GitStatusResponse;
   canRestart?: boolean;

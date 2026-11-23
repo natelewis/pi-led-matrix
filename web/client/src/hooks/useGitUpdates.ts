@@ -151,7 +151,7 @@ export function useGitUpdates({
     const seq = ++seqRef.current;
     setUpdating(true);
     setError(null);
-    setPhaseMessage('Pulling latest commits from git…');
+    setPhaseMessage('Pulling latest commits & rebuilding changed dependencies…');
 
     try {
       const pull = await api.system.gitPull();
@@ -193,7 +193,7 @@ export function useGitUpdates({
 
         if (
           serverBackOnline &&
-          pull.playbackFilesChanged &&
+          (pull.playbackFilesChanged || pull.pythonDepsChanged) &&
           isPlayingRef.current &&
           onBouncePlaybackRef.current
         ) {

@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -17,6 +18,7 @@ except ImportError:  # pragma: no cover - non-POSIX
 
 
 GIT_COMMAND_TIMEOUT = 30.0
+BUILD_COMMAND_TIMEOUT = 240.0
 MAX_DIRTY_FILES = 20
 MAX_CHANGED_FILES = 50
 MAX_OUTPUT_CHARS = 2000
@@ -252,8 +254,145 @@ class GitRepoUpdater:
         with self._lock:
             return self._get_status_unlocked(fetch=fetch)
 
-    def pull(self) -> Dict[str, Any]:
-        """Fetch and fast-forward the current branch safely (`--ff-only`)."""
+    def _resolve_python_executable(self) -> str:
+        for candidate in (
+            self.repo_root / ".venv" / "bin" / "python",
+            self.repo_root / "venv" / "bin" / "python",
+        ):
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                return str(candidate)
+        return sys.executable
+
+    def _run_tool(
+        self,
+        cmd: List[str],
+        *,
+        cwd: Path,
+        timeout: float = BUILD_COMMAND_TIMEOUT,
+        extra_env: Optional[Dict[str, str]] = None,
+    ) -> Tuple[bool, str]:
+        env, extra = self._build_subprocess_kwargs()
+        if extra_env:
+            env.update(extra_env)
+        try:
+            proc = subprocess.run(
+                cmd,
+                cwd=str(cwd),
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                env=env,
+                **extra,
+            )
+        except subprocess.TimeoutExpired:
+            return False, f"Timed out after {int(timeout)}s."
+        except OSError as exc:
+            return False, f"Failed to run {cmd[0]}: {exc}"
+
+        output = _sanitize_text(
+            "\n".join(part for part in (proc.stdout.strip(), proc.stderr.strip()) if part)
+        )
+        if proc.returncode != 0:
+            lines = [ln for ln in output.splitlines() if ln.strip()]
+            tail = "\n".join(lines[-8:]) if lines else f"Exited with code {proc.returncode}."
+            return False, tail
+        return True, output
+
+    def _run_conditional_rebuilds(
+        self,
+        *,
+        python_deps_changed: bool,
+        node_deps_changed: bool,
+        client_files_changed: bool,
+    ) -> List[Dict[str, str]]:
+        steps: List[Dict[str, str]] = []
+
+        if python_deps_changed:
+            req_file = self.repo_root / "requirements.txt"
+            if req_file.is_file():
+                py_bin = self._resolve_python_executable()
+                ok, detail = self._run_tool(
+                    [py_bin, "-m", "pip", "install", "-r", str(req_file)],
+                    cwd=self.repo_root,
+                    extra_env={"PIP_DISABLE_PIP_VERSION_CHECK": "1"},
+                )
+                steps.append(
+                    {
+                        "name": "python-deps",
+                        "status": "ok" if ok else "failed",
+                        "detail": (
+                            "Installed updated Python requirements."
+                            if ok
+                            else detail
+                        ),
+                    }
+                )
+
+        if node_deps_changed or client_files_changed:
+            client_dir = self.repo_root / "web" / "client"
+            pkg_json = client_dir / "package.json"
+            if client_dir.is_dir() and pkg_json.is_file():
+                npm_bin = shutil.which("npm")
+                has_frontend_install = (client_dir / "node_modules").is_dir() or (
+                    client_dir / "dist"
+                ).is_dir()
+                if not npm_bin:
+                    steps.append(
+                        {
+                            "name": "frontend-build",
+                            "status": "skipped",
+                            "detail": "npm not installed (skipped on headless Pi).",
+                        }
+                    )
+                elif not has_frontend_install:
+                    steps.append(
+                        {
+                            "name": "frontend-build",
+                            "status": "skipped",
+                            "detail": "Frontend not installed on this device.",
+                        }
+                    )
+                else:
+                    deps_ok = True
+                    if node_deps_changed or not (client_dir / "node_modules").is_dir():
+                        use_ci = (client_dir / "package-lock.json").is_file()
+                        ok, detail = self._run_tool(
+                            [npm_bin, "ci" if use_ci else "install"],
+                            cwd=client_dir,
+                        )
+                        deps_ok = ok
+                        steps.append(
+                            {
+                                "name": "node-deps",
+                                "status": "ok" if ok else "failed",
+                                "detail": (
+                                    "Installed updated frontend dependencies."
+                                    if ok
+                                    else detail
+                                ),
+                            }
+                        )
+                    if deps_ok:
+                        ok, detail = self._run_tool(
+                            [npm_bin, "run", "build"],
+                            cwd=client_dir,
+                        )
+                        steps.append(
+                            {
+                                "name": "frontend-build",
+                                "status": "ok" if ok else "failed",
+                                "detail": (
+                                    "Rebuilt React frontend bundle."
+                                    if ok
+                                    else detail
+                                ),
+                            }
+                        )
+
+        return steps
+
+    def pull(self, *, auto_rebuild: bool = True) -> Dict[str, Any]:
+        """Fetch, fast-forward (`--ff-only`), and conditionally rebuild changed deps/UI."""
         with self._lock:
             if not self._is_git_repo():
                 raise GitOperationError(
@@ -345,6 +484,23 @@ class GitRepoUpdater:
                 f.startswith("web/client/") for f in changed_files
             )
             playback_files_changed = any(f.startswith("src/") for f in changed_files)
+            python_deps_changed = any(
+                f in ("requirements.txt", "pyproject.toml")
+                or f.endswith("/requirements.txt")
+                for f in changed_files
+            )
+            node_deps_changed = any(
+                f in ("web/client/package.json", "web/client/package-lock.json")
+                for f in changed_files
+            )
+
+            rebuild_steps: List[Dict[str, str]] = []
+            if updated and auto_rebuild:
+                rebuild_steps = self._run_conditional_rebuilds(
+                    python_deps_changed=python_deps_changed,
+                    node_deps_changed=node_deps_changed,
+                    client_files_changed=client_files_changed,
+                )
 
             combined_out = _sanitize_text(
                 "\n".join(
@@ -362,6 +518,11 @@ class GitRepoUpdater:
                 "serverFilesChanged": server_files_changed,
                 "clientFilesChanged": client_files_changed,
                 "playbackFilesChanged": playback_files_changed,
+                "pythonDepsChanged": python_deps_changed,
+                "nodeDepsChanged": node_deps_changed,
+                "rebuildSteps": rebuild_steps,
+                "rebuilt": any(s["status"] == "ok" for s in rebuild_steps),
+                "rebuildFailed": any(s["status"] == "failed" for s in rebuild_steps),
                 "output": combined_out or ("Already up to date." if not updated else "Updated."),
                 "status": status,
             }
