@@ -10,6 +10,24 @@ This is a LED matrix library that simplifies driving a LED matrix of any size cr
 
 <https://user-images.githubusercontent.com/1588877/177685583-cab5ac70-1f26-48f9-ab31-55bf0a61bf8d.mp4>
 
+## LED Matrix Studio (Web UI & Remote Control)
+
+You don't need to hand-edit `config.json`, run `ffmpeg` resize commands by hand, or SSH into your Raspberry Pi every time you want to tweak your display. **LED Matrix Studio** gives you a modern web interface that makes running and customizing your matrix effortless:
+
+![LED Matrix Studio Overview](web/docs/screenshots/overview.png)
+
+- **Visual config & live playback**: Build and reorder playlists, tune brightness/color/pins, click **Play Now** or **Skip** in real time, and hot-reload `config.json` changes without restarting.
+- **Drop-in image & video uploads**: Upload photos or clips right from your browser — Studio smart-crops, trims, and transcodes them to match your exact LED matrix dimensions automatically.
+- **Control a Raspberry Pi from another room**: Run Studio on your laptop and connect to one or more headless Raspberry Pis over your local network, watch a **Live Matrix Mirror** of what's playing, and pull new updates with one-click **Pull & Restart**.
+- **Zero extra Python dependencies on the Pi**: The Studio backend uses only Python 3's standard library.
+
+```bash
+make web-build   # build the React UI once (only needed on the machine serving the UI)
+make web         # open http://localhost:8080
+```
+
+See [web/README.md](web/README.md) for full Studio documentation and screenshots, and [deploy/systemd/README.md](deploy/systemd/README.md) to auto-start the server headlessly on Raspberry Pi boot.
+
 ## Virtual Environment Quick Start
 
 ```bash
