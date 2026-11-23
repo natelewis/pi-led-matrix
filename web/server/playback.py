@@ -430,8 +430,19 @@ class PlaybackController:
             return None
         return width, height, rgb, stat.st_mtime
 
+    def close_log_handle(self) -> None:
+        """Close the open playlist log file handle without terminating a running playlist."""
+        with self._lock:
+            if self._log_handle is not None:
+                try:
+                    self._log_handle.close()
+                except OSError:
+                    pass
+                self._log_handle = None
+
     def shutdown(self) -> None:
         with self._lock:
             proc = self._proc
         if proc is not None and proc.poll() is None:
             self.stop()
+        self.close_log_handle()

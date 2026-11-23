@@ -14,16 +14,18 @@ import os
 import posixpath
 import subprocess
 import sys
+import threading
 import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 from urllib.parse import parse_qs, urlparse
 
 from .auth import AuthManager
 from .config_store import ConfigStore, ConfigValidationError
 from .effects import discover_effects, discover_fonts
+from .git_ops import GitOperationError, GitRepoUpdater
 from .media import ImageMediaStore, VideoMediaStore
 from .playback import PlaybackController
 from .router import Router
@@ -49,6 +51,7 @@ class AppContext:
         auth_file: Optional[Path] = None,
         targets_file: Optional[Path] = None,
         env_password: Optional[str] = None,
+        restart_callback: Optional[Callable[[], None]] = None,
     ) -> None:
         self.repo_root = repo_root.resolve()
         self.web_root = self.repo_root / "web"
@@ -68,6 +71,8 @@ class AppContext:
         self.media_store = ImageMediaStore(self.repo_root)
         self.video_store = VideoMediaStore(self.repo_root)
         self.playback = PlaybackController(self.repo_root)
+        self.git_updater = GitRepoUpdater(self.repo_root)
+        self.restart_callback = restart_callback
         self.router = self._build_router()
 
     def _build_router(self) -> Router:
@@ -669,6 +674,52 @@ class AppContext:
                 return
             req.send_json({"ok": True, "remote": remote_resp})
 
+        # ---- System / Git Updates (proxied when a remote Pi is active) ----
+
+        @router.get("/api/system/git-status", require_auth=True)
+        def system_git_status(
+            req: MatrixRequestHandler, _params: Dict[str, str]
+        ) -> None:
+            parsed = urlparse(req.path)
+            qs = parse_qs(parsed.query)
+            do_fetch = (qs.get("fetch", ["0"])[0] or "").strip().lower() in (
+                "1",
+                "true",
+                "yes",
+            )
+            try:
+                status = self.git_updater.get_status(fetch=do_fetch)
+            except GitOperationError as exc:
+                req.send_json({"error": str(exc)}, status=HTTPStatus(exc.status))
+                return
+            status["canRestart"] = self.restart_callback is not None
+            req.send_json(status)
+
+        @router.post("/api/system/git-pull", require_auth=True)
+        def system_git_pull(
+            req: MatrixRequestHandler, _params: Dict[str, str]
+        ) -> None:
+            try:
+                result = self.git_updater.pull()
+            except GitOperationError as exc:
+                req.send_json({"error": str(exc)}, status=HTTPStatus(exc.status))
+                return
+            result["canRestart"] = self.restart_callback is not None
+            req.send_json(result)
+
+        @router.post("/api/system/restart", require_auth=True)
+        def system_restart(
+            req: MatrixRequestHandler, _params: Dict[str, str]
+        ) -> None:
+            if self.restart_callback is None:
+                req.send_json(
+                    {"error": "Server restart is not enabled in this runtime."},
+                    status=HTTPStatus.NOT_IMPLEMENTED,
+                )
+                return
+            req.send_json({"restarting": True})
+            self.restart_callback()
+
         return router
 
 
@@ -1004,6 +1055,7 @@ def create_server(
     auth_file: Optional[Path] = None,
     targets_file: Optional[Path] = None,
     env_password: Optional[str] = None,
+    restart_callback: Optional[Callable[[], None]] = None,
 ) -> ThreadingHTTPServer:
     httpd = ThreadingHTTPServer((host, port), MatrixRequestHandler)
     httpd.daemon_threads = True
@@ -1013,6 +1065,7 @@ def create_server(
         auth_file=auth_file,
         targets_file=targets_file,
         env_password=env_password,
+        restart_callback=restart_callback,
     )
     return httpd
 
@@ -1093,7 +1146,28 @@ def main() -> None:
         _run_with_reloader(sys.argv[1:])
         return
 
-    httpd = create_server(args.host, args.port, repo_root=args.repo_root)
+    restart_requested = threading.Event()
+    httpd_holder: list[ThreadingHTTPServer] = []
+
+    def _request_restart() -> None:
+        if restart_requested.is_set():
+            return
+        restart_requested.set()
+
+        def _trigger_shutdown() -> None:
+            time.sleep(0.35)
+            if httpd_holder:
+                httpd_holder[0].shutdown()
+
+        threading.Thread(target=_trigger_shutdown, daemon=True).start()
+
+    httpd = create_server(
+        args.host,
+        args.port,
+        repo_root=args.repo_root,
+        restart_callback=_request_restart,
+    )
+    httpd_holder.append(httpd)
     print(f"LED Matrix Web Server listening on http://{args.host}:{args.port}")
     print(f"Repository root: {args.repo_root.resolve()}")
     try:
@@ -1101,8 +1175,19 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\nShutting down web server...")
     finally:
-        httpd.app_ctx.playback.shutdown()  # type: ignore[attr-defined]
-        httpd.server_close()
+        if restart_requested.is_set():
+            print("\nRestarting web server to load updated code...")
+            sys.stdout.flush()
+            sys.stderr.flush()
+            httpd.app_ctx.playback.close_log_handle()  # type: ignore[attr-defined]
+            httpd.server_close()
+            os.execv(
+                sys.executable,
+                [sys.executable, "-m", "web.server.app", *sys.argv[1:]],
+            )
+        else:
+            httpd.app_ctx.playback.shutdown()  # type: ignore[attr-defined]
+            httpd.server_close()
 
 
 if __name__ == "__main__":

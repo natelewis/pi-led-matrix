@@ -25,6 +25,7 @@ from urllib.parse import urlparse
 LOCAL_TARGET_ID = "local"
 SESSION_COOKIE_NAME = "led_matrix_session"
 PROXY_CONNECT_TIMEOUT = 8.0
+PROXY_GIT_TIMEOUT = 45.0
 PROXY_UPLOAD_TIMEOUT = 310.0
 TEST_TIMEOUT = 4.0
 MAX_CONTROL_RESP_BYTES = 1_048_576  # 1 MiB cap for control/auth responses
@@ -536,7 +537,12 @@ class TargetManager:
                 )
                 return
 
-        timeout = PROXY_UPLOAD_TIMEOUT if is_video_upload else PROXY_CONNECT_TIMEOUT
+        is_git_op = raw_path_and_query.startswith("/api/system/git-")
+        timeout = (
+            PROXY_UPLOAD_TIMEOUT
+            if is_video_upload
+            else (PROXY_GIT_TIMEOUT if is_git_op else PROXY_CONNECT_TIMEOUT)
+        )
         conn, netloc = _open_connection(target["url"], timeout=timeout)
 
         token = target.get("sessionToken", "")

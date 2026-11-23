@@ -23,6 +23,7 @@ const DEFAULT_TARGETS: TargetsState = {
 
 export function useTargets({ enabled, onLocalUnauthorized }: UseTargetsOptions) {
   const [state, setState] = useState<TargetsState>(DEFAULT_TARGETS);
+  const [initialized, setInitialized] = useState(false);
   const [loading, setLoading] = useState(false);
   const [switching, setSwitching] = useState(false);
   const [remoteAuthNeeded, setRemoteAuthNeeded] = useState(false);
@@ -49,6 +50,7 @@ export function useTargets({ enabled, onLocalUnauthorized }: UseTargetsOptions) 
       onLocalUnauthorized?.(err);
     } finally {
       setLoading(false);
+      setInitialized(true);
     }
   }, [enabled, onLocalUnauthorized, applyTargetsState]);
 
@@ -57,6 +59,7 @@ export function useTargets({ enabled, onLocalUnauthorized }: UseTargetsOptions) 
       void refresh();
     } else {
       applyTargetsState(DEFAULT_TARGETS);
+      setInitialized(false);
       setRemoteAuthNeeded(false);
       setRemoteUnreachableError(null);
     }
@@ -205,6 +208,7 @@ export function useTargets({ enabled, onLocalUnauthorized }: UseTargetsOptions) 
     activeTargetId: state.activeTargetId,
     activeTarget,
     isRemote,
+    initialized,
     loading,
     switching,
     remoteAuthNeeded,

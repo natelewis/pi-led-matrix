@@ -2,6 +2,8 @@ import type {
   AuthStatus,
   ConfigResponse,
   EffectsResponse,
+  GitPullResponse,
+  GitStatusResponse,
   ImageFilesResponse,
   ImageUploadResponse,
   LiveFrameData,
@@ -376,6 +378,21 @@ export const api = {
       }),
     pushConfig: (id: string) =>
       request<{ ok: boolean }>(`/api/targets/${encodeURIComponent(id)}/push-config`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      }),
+  },
+
+  system: {
+    gitStatus: (fetch = false) =>
+      request<GitStatusResponse>(`/api/system/git-status${fetch ? '?fetch=1' : ''}`),
+    gitPull: () =>
+      request<GitPullResponse>('/api/system/git-pull', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      }),
+    restart: () =>
+      request<{ restarting: boolean }>('/api/system/restart', {
         method: 'POST',
         body: JSON.stringify({}),
       }),

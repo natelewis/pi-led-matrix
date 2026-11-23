@@ -13,6 +13,7 @@ import {
   Wifi,
 } from 'lucide-react';
 import { api } from '@/api/client';
+import { GitUpdateCard } from '@/components/config/GitUpdateCard';
 import {
   Badge,
   Button,
@@ -26,11 +27,18 @@ import {
   SectionHeader,
   useToast,
 } from '@/components/ui';
-import type { MatrixTarget, TargetProbeResult, TargetsState } from '@/types/matrix';
+import type {
+  GitPullResponse,
+  MatrixTarget,
+  TargetProbeResult,
+  TargetsState,
+} from '@/types/matrix';
 
 export interface DevicesPageProps {
   targets: MatrixTarget[];
+  activeTarget: MatrixTarget;
   activeTargetId: string;
+  targetDataEnabled: boolean;
   switching: boolean;
   onSyncTargetsState: (state: TargetsState) => void;
   onSelectTarget: (targetId: string) => Promise<unknown>;
@@ -39,11 +47,15 @@ export interface DevicesPageProps {
   onLoginTarget: (id: string, password: string, setup?: boolean) => Promise<unknown>;
   onLogoutTarget: (id: string) => Promise<unknown>;
   onPushLocalConfig: (id: string) => Promise<unknown>;
+  onApiError?: (err: unknown) => boolean;
+  onRepoUpdated?: (res: GitPullResponse) => void;
 }
 
 export function DevicesPage({
   targets,
+  activeTarget,
   activeTargetId,
+  targetDataEnabled,
   switching,
   onSyncTargetsState,
   onSelectTarget,
@@ -52,6 +64,8 @@ export function DevicesPage({
   onLoginTarget,
   onLogoutTarget,
   onPushLocalConfig,
+  onApiError,
+  onRepoUpdated,
 }: DevicesPageProps) {
   const { notify } = useToast();
 
@@ -347,6 +361,14 @@ export function DevicesPage({
           })}
         </CardContent>
       </Card>
+
+      {/* Repository & Software Updates for the active target */}
+      <GitUpdateCard
+        activeTarget={activeTarget}
+        enabled={targetDataEnabled}
+        onApiError={onApiError}
+        onRepoUpdated={onRepoUpdated}
+      />
 
       {/* Add Remote Device + Pi Setup Guide */}
       <div className="grid gap-6 lg:grid-cols-5">

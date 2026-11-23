@@ -165,3 +165,34 @@ export interface LiveFrameData {
   rgbBytes: Uint8Array;
   timestamp: number;
 }
+
+export interface GitStatusResponse {
+  isGitRepo: boolean;
+  branch: string | null;
+  detached: boolean;
+  commit: string | null;
+  commitMessage: string | null;
+  commitDate: string | null;
+  remoteUrl: string | null;
+  upstream: string | null;
+  dirty: boolean;
+  dirtyFiles: string[];
+  ahead: number | null;
+  behind: number | null;
+  fetchError: string | null;
+  canRestart?: boolean;
+}
+
+export interface GitPullResponse {
+  updated: boolean;
+  beforeCommit: string;
+  afterCommit: string;
+  changedFiles: string[];
+  totalChangedFiles: number;
+  serverFilesChanged: boolean;
+  clientFilesChanged: boolean;
+  playbackFilesChanged: boolean;
+  output: string;
+  status: GitStatusResponse;
+  canRestart?: boolean;
+}

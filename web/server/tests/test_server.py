@@ -638,6 +638,160 @@ class WebServerTestCase(unittest.TestCase):
         finally:
             shutil.rmtree(remote_dir, ignore_errors=True)
 
+    def test_remote_git_pull_and_restart(self) -> None:
+        if not shutil.which("git"):
+            self.skipTest("git is not installed")
+
+        sandbox = Path(tempfile.mkdtemp(prefix="led_matrix_git_test_"))
+        try:
+            bare_dir = sandbox / "origin.git"
+            dev_dir = sandbox / "dev"
+            pi_dir = sandbox / "pi"
+
+            git_env = {
+                **os.environ,
+                "GIT_AUTHOR_NAME": "Test User",
+                "GIT_AUTHOR_EMAIL": "test@example.com",
+                "GIT_COMMITTER_NAME": "Test User",
+                "GIT_COMMITTER_EMAIL": "test@example.com",
+                "GIT_TERMINAL_PROMPT": "0",
+            }
+
+            def run_git(cwd: Path, *args: str) -> None:
+                res = subprocess.run(
+                    ["git", *args],
+                    cwd=str(cwd),
+                    env=git_env,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertEqual(
+                    res.returncode,
+                    0,
+                    f"git {' '.join(args)} failed: {res.stderr or res.stdout}",
+                )
+
+            bare_dir.mkdir()
+            run_git(bare_dir, "init", "--bare", "-b", "main")
+            run_git(sandbox, "clone", str(bare_dir), str(dev_dir))
+            shutil.copy2(REPO_ROOT / "default_config.json", dev_dir / "default_config.json")
+            (dev_dir / "src").mkdir(exist_ok=True)
+            (dev_dir / "src" / "effect.py").write_text("VALUE = 1\n", encoding="utf-8")
+            (dev_dir / "web" / "server").mkdir(parents=True, exist_ok=True)
+            (dev_dir / "web" / "server" / "dummy.py").write_text("V = 1\n", encoding="utf-8")
+            run_git(dev_dir, "add", ".")
+            run_git(dev_dir, "commit", "-m", "initial commit")
+            run_git(dev_dir, "push", "-u", "origin", "main")
+
+            # Clone onto simulated Pi
+            run_git(sandbox, "clone", str(bare_dir), str(pi_dir))
+            (pi_dir / "web" / "client" / "dist").mkdir(parents=True, exist_ok=True)
+
+            # Push a new commit from dev repo so Pi is 1 commit behind
+            (dev_dir / "src" / "effect.py").write_text("VALUE = 2\n", encoding="utf-8")
+            (dev_dir / "web" / "server" / "dummy.py").write_text("V = 2\n", encoding="utf-8")
+            run_git(dev_dir, "add", ".")
+            run_git(dev_dir, "commit", "-m", "add new matrix effect")
+            run_git(dev_dir, "push", "origin", "main")
+
+            restarted = threading.Event()
+            pi_server = create_server(
+                "127.0.0.1",
+                0,
+                repo_root=pi_dir,
+                static_dir=pi_dir / "web" / "client" / "dist",
+                auth_file=pi_dir / "web" / ".auth.json",
+                targets_file=pi_dir / "web" / ".targets.json",
+                env_password="pi-password",
+                restart_callback=restarted.set,
+            )
+            pi_port = pi_server.server_address[1]
+            pi_thread = threading.Thread(target=pi_server.serve_forever, daemon=True)
+            pi_thread.start()
+            try:
+                _, headers, _ = self._request(
+                    "POST", "/api/auth/setup", {"password": "local-password"}
+                )
+                local_cookie = self._extract_cookie(headers)
+                # Non-git local tmpdir reports isGitRepo=False cleanly
+                status, _, local_git = self._request(
+                    "GET", "/api/system/git-status", cookie=local_cookie
+                )
+                self.assertEqual(status, 200)
+                self.assertFalse(local_git["isGitRepo"])
+                self.assertFalse(local_git["canRestart"])
+
+                # Add, switch, and log into remote Pi
+                status, _, added = self._request(
+                    "POST",
+                    "/api/targets",
+                    {"name": "Pi Git Test", "url": f"http://127.0.0.1:{pi_port}"},
+                    cookie=local_cookie,
+                )
+                self.assertEqual(status, 201)
+                target_id = added["target"]["id"]
+                status, _, _ = self._request(
+                    "POST",
+                    f"/api/targets/{target_id}/login",
+                    {"password": "pi-password"},
+                    cookie=local_cookie,
+                )
+                self.assertEqual(status, 200)
+                status, _, _ = self._request(
+                    "POST",
+                    "/api/targets/active",
+                    {"targetId": target_id},
+                    cookie=local_cookie,
+                )
+                self.assertEqual(status, 200)
+
+                # Proxied git-status?fetch=1 detects the Pi is 1 commit behind
+                status, _, pi_git = self._request(
+                    "GET", "/api/system/git-status?fetch=1", cookie=local_cookie
+                )
+                self.assertEqual(status, 200)
+                self.assertTrue(pi_git["isGitRepo"])
+                self.assertEqual(pi_git["branch"], "main")
+                self.assertEqual(pi_git["behind"], 1)
+                self.assertTrue(pi_git["canRestart"])
+
+                # Dirty tracked file blocks git pull cleanly with 409
+                (pi_dir / "src" / "effect.py").write_text("VALUE = 99\n", encoding="utf-8")
+                status, _, dirty_err = self._request(
+                    "POST", "/api/system/git-pull", {}, cookie=local_cookie
+                )
+                self.assertEqual(status, 409)
+                self.assertIn("src/effect.py", dirty_err["error"])
+
+                # Revert local tracked edit -> proxied git pull fast-forwards cleanly!
+                run_git(pi_dir, "checkout", "--", "src/effect.py")
+                status, _, pull_res = self._request(
+                    "POST", "/api/system/git-pull", {}, cookie=local_cookie
+                )
+                self.assertEqual(status, 200)
+                self.assertTrue(pull_res["updated"])
+                self.assertTrue(pull_res["serverFilesChanged"])
+                self.assertTrue(pull_res["playbackFilesChanged"])
+                self.assertIn("src/effect.py", pull_res["changedFiles"])
+                self.assertEqual(pull_res["status"]["behind"], 0)
+                self.assertEqual(
+                    (pi_dir / "src" / "effect.py").read_text(encoding="utf-8"),
+                    "VALUE = 2\n",
+                )
+
+                # Proxied restart triggers the remote Pi's restart callback
+                status, _, restart_res = self._request(
+                    "POST", "/api/system/restart", {}, cookie=local_cookie
+                )
+                self.assertEqual(status, 200)
+                self.assertTrue(restart_res["restarting"])
+                self.assertTrue(restarted.is_set())
+            finally:
+                pi_server.shutdown()
+                pi_server.server_close()
+        finally:
+            shutil.rmtree(sandbox, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()

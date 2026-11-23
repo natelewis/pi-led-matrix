@@ -44,7 +44,7 @@ function MatrixStudioApp() {
       Boolean(targets.remoteUnreachableError) ||
       !targets.activeTarget.hasSession);
 
-  const targetDataEnabled = localAuthenticated && !remoteBlocked;
+  const targetDataEnabled = localAuthenticated && targets.initialized && !remoteBlocked;
 
   const matrix = useMatrixConfig({
     enabled: targetDataEnabled,
@@ -224,7 +224,7 @@ function MatrixStudioApp() {
       onDiscard={matrix.discard}
       onLogout={() => void auth.logout()}
       subHeader={
-        !remoteBlocked ? (
+        targetDataEnabled ? (
           <LivePlaybackBar
             playback={playback.status}
             effectMap={matrix.effectMap}
@@ -247,7 +247,9 @@ function MatrixStudioApp() {
       {section === 'devices' ? (
         <DevicesPage
           targets={targets.targets}
+          activeTarget={targets.activeTarget}
           activeTargetId={targets.activeTargetId}
+          targetDataEnabled={targetDataEnabled}
           switching={targets.switching}
           onSyncTargetsState={targets.applyTargetsState}
           onSelectTarget={handleSelectTarget}
@@ -256,6 +258,13 @@ function MatrixStudioApp() {
           onLoginTarget={targets.loginTarget}
           onLogoutTarget={targets.logoutTarget}
           onPushLocalConfig={targets.pushLocalConfig}
+          onApiError={targets.handleApiError}
+          onRepoUpdated={() => {
+            void matrix.reloadEffects();
+            if (!matrix.isDirty) {
+              void matrix.reload();
+            }
+          }}
         />
       ) : section === 'security' ? (
         <SecurityPage
