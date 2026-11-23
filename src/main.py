@@ -9,7 +9,9 @@ import numpy as np
 import cv2
 
 
-from lib import led_color, led_image, led_time, led_text
+from lib import led_color, led_image, led_time, led_text, runtime_ipc
+
+FRAME_MIRROR_INTERVAL_SEC = 0.12  # ~8 FPS max snapshot rate for Studio live mirror
 
 
 class MockBoard:  # pylint: disable=too-few-public-methods
@@ -169,6 +171,7 @@ class VirtualMatrix:
         self.reset()
         self.start_time = led_time.get_start_time()
         self._last_show_time = None
+        self._last_mirror_time = 0.0
         self._interrupt_check = None
         self._last_interrupt_poll = 0.0
         self._interrupted = False
@@ -323,7 +326,11 @@ class VirtualMatrix:
         self.screen.fill((0, 0, 0))
         self.screen.blit(surface, (self.layout["offset_x"], self.layout["offset_y"]))
         self.pygame.display.flip()
-        self._last_show_time = time.monotonic()
+        now = time.monotonic()
+        self._last_show_time = now
+        if now - self._last_mirror_time >= FRAME_MIRROR_INTERVAL_SEC:
+            self._last_mirror_time = now
+            runtime_ipc.write_frame_snapshot(enhanced)
 
     def reset(self, rgb_color=(0, 0, 0)):
         self.frame = np.full([pixel_height, pixel_width, 3], rgb_color, np.uint8)
@@ -396,6 +403,7 @@ class LiveMatrix:
             )
             self.buffers.append(buffer)
         self.start_time = led_time.get_start_time()
+        self._last_mirror_time = 0.0
 
     def ready(self):
         return led_time.ready(self.start_time, playlist_delay)
@@ -463,6 +471,7 @@ class LiveMatrix:
         led_image.sprite(self, sprite_map, start, color_map)
 
     def show(self, delay_ms=None):
+        enhanced_panels = []
         for index, _ in enumerate(pixel_pins):
             # Calculate start and end positions for slicing the frame
             start_x = index * self.panel_width
@@ -470,14 +479,31 @@ class LiveMatrix:
 
             # Slice the frame to get the current panel
             panel_frame = self.frame[:, start_x:end_x]
+            enhanced_panel = led_image.enhance(panel_frame, color, contrast)
+            enhanced_panels.append(enhanced_panel)
 
-            img = Image.fromarray(
-                led_image.enhance(panel_frame, color, contrast), mode="RGB"
-            )
+            img = Image.fromarray(enhanced_panel, mode="RGB")
             self.buffers[index].image(img)
 
         for index, _ in enumerate(pixel_pins):
             self.buffers[index].display()
+
+        now = time.monotonic()
+        if (
+            now - self._last_mirror_time >= FRAME_MIRROR_INTERVAL_SEC
+            and runtime_ipc.is_mirror_active()
+        ):
+            self._last_mirror_time = now
+            mirror_frame = (
+                enhanced_panels[0]
+                if len(enhanced_panels) == 1
+                else np.concatenate(enhanced_panels, axis=1)
+            )
+            if color_order != "rgb":
+                # Un-swap channels back to true RGB for the remote Studio preview
+                inv = [color_order.index("r"), color_order.index("g"), color_order.index("b")]
+                mirror_frame = mirror_frame[:, :, inv]
+            runtime_ipc.write_frame_snapshot(mirror_frame)
 
         if delay_ms is not None and delay_ms > 0:
             self.delay(delay_ms)

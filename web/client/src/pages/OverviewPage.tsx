@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import {
   ArrowRight,
   Cpu,
+  Grid3X3,
   ListMusic,
   Monitor,
+  Radio,
   SlidersHorizontal,
   Sparkles,
   Sun,
@@ -15,6 +18,7 @@ import {
   CardHeader,
   SectionHeader,
 } from '@/components/ui';
+import { LiveMatrixMirror } from '@/components/config/LiveMatrixMirror';
 import { MatrixPreviewGrid } from '@/components/config/MatrixPreviewGrid';
 import { PlaylistEntryLabel } from '@/components/config/PlaylistEntryLabel';
 import type { EffectMeta, MatrixConfig, NavSectionId } from '@/types/matrix';
@@ -24,6 +28,10 @@ interface OverviewPageProps {
   source: 'custom' | 'default';
   updatedAt: string | null;
   effects: EffectMeta[];
+  isPlaying: boolean;
+  targetId: string;
+  targetName: string;
+  onApiError?: (err: unknown) => boolean;
   onNavigate: (section: NavSectionId) => void;
 }
 
@@ -32,8 +40,13 @@ export function OverviewPage({
   source,
   updatedAt,
   effects,
+  isPlaying,
+  targetId,
+  targetName,
+  onApiError,
   onNavigate,
 }: OverviewPageProps) {
+  const [previewMode, setPreviewMode] = useState<'layout' | 'mirror'>('layout');
   const uniquePlaylistEffects = new Set(config.playlist.map((p) => p.effect)).size;
   const totalPixels = config.pixel_width * config.pixel_height;
 
@@ -120,21 +133,68 @@ export function OverviewPage({
       <div className="grid gap-6 lg:grid-cols-5">
         <Card className="lg:col-span-3">
           <CardHeader
-            title="Live Panel Layout Preview"
-            description="Proportional preview of matrix dimensions, GPIO panel splits, and visual settings."
+            title={
+              previewMode === 'mirror'
+                ? 'Live Matrix Mirror'
+                : 'Live Panel Layout Preview'
+            }
+            description={
+              previewMode === 'mirror'
+                ? `Real-time pixel stream from ${targetName}.`
+                : 'Proportional preview of matrix dimensions, GPIO panel splits, and visual settings.'
+            }
             action={
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => onNavigate('display')}
-                rightIcon={<ArrowRight className="h-3.5 w-3.5" />}
-              >
-                Configure
-              </Button>
+              <div className="flex items-center gap-2">
+                <div className="inline-flex rounded-lg border border-slate-800 bg-surface-950 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewMode('layout')}
+                    className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer ${
+                      previewMode === 'layout'
+                        ? 'bg-cyan-500/20 text-cyan-200'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Grid3X3 className="h-3 w-3" />
+                    Layout
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewMode('mirror')}
+                    className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer ${
+                      previewMode === 'mirror'
+                        ? 'bg-emerald-500/20 text-emerald-200'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Radio className="h-3 w-3" />
+                    Live Mirror
+                  </button>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onNavigate('display')}
+                  rightIcon={<ArrowRight className="h-3.5 w-3.5" />}
+                >
+                  Configure
+                </Button>
+              </div>
             }
           />
           <CardContent>
-            <MatrixPreviewGrid config={config} />
+            {previewMode === 'mirror' ? (
+              <LiveMatrixMirror
+                key={targetId}
+                active={previewMode === 'mirror'}
+                isPlaying={isPlaying}
+                ledDots={config.virtual_led_dots}
+                targetName={targetName}
+                onApiError={onApiError}
+              />
+            ) : (
+              <MatrixPreviewGrid config={config} />
+            )}
           </CardContent>
         </Card>
 

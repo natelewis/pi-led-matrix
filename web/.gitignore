@@ -1,7 +1,9 @@
 # Web dashboard artifacts & local secrets
 .auth.json
+.targets.json
 client/node_modules/
 client/dist/
+client/.vite/
 client/tsconfig.tsbuildinfo
 server/__pycache__/
 server/tests/__pycache__/

@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { LivePlaybackBar } from '@/components/config/LivePlaybackBar';
+import { RemoteUnlockCard } from '@/components/config/RemoteUnlockCard';
 import { AppShell } from '@/components/layout/AppShell';
 import { NAV_ITEMS } from '@/components/layout/navItems';
 import { Button, ErrorBoundary, ToastProvider, useToast } from '@/components/ui';
 import { useAuth } from '@/hooks/useAuth';
 import { useMatrixConfig } from '@/hooks/useMatrixConfig';
 import { usePlayback } from '@/hooks/usePlayback';
+import { useTargets } from '@/hooks/useTargets';
 import { AuthPage } from '@/pages/AuthPage';
+import { DevicesPage } from '@/pages/DevicesPage';
 import { DisplayPage } from '@/pages/DisplayPage';
 import { OverviewPage } from '@/pages/OverviewPage';
 import { PlaylistPage } from '@/pages/PlaylistPage';
@@ -28,14 +31,31 @@ function MatrixStudioApp() {
   const auth = useAuth();
   const [section, setSection] = useState<NavSectionId>(readSectionFromHash);
 
+  const localAuthenticated = Boolean(auth.status?.authenticated);
+
+  const targets = useTargets({
+    enabled: localAuthenticated,
+    onLocalUnauthorized: auth.handleUnauthorized,
+  });
+
+  const remoteBlocked =
+    targets.isRemote &&
+    (targets.remoteAuthNeeded ||
+      Boolean(targets.remoteUnreachableError) ||
+      !targets.activeTarget.hasSession);
+
+  const targetDataEnabled = localAuthenticated && !remoteBlocked;
+
   const matrix = useMatrixConfig({
-    enabled: Boolean(auth.status?.authenticated),
-    onUnauthorized: auth.handleUnauthorized,
+    enabled: targetDataEnabled,
+    targetKey: targets.activeTargetId,
+    onUnauthorized: targets.handleApiError,
   });
 
   const playback = usePlayback({
-    enabled: Boolean(auth.status?.authenticated),
-    onUnauthorized: auth.handleUnauthorized,
+    enabled: targetDataEnabled,
+    targetKey: targets.activeTargetId,
+    onUnauthorized: targets.handleApiError,
   });
 
   useEffect(() => {
@@ -61,6 +81,28 @@ function MatrixStudioApp() {
     }
   };
 
+  const handleSelectTarget = async (targetId: string) => {
+    if (matrix.isDirty) {
+      const ok = window.confirm(
+        'You have unsaved configuration changes. Switch devices and discard them?'
+      );
+      if (!ok) return;
+    }
+    try {
+      const next = await targets.selectTarget(targetId);
+      const chosen = next.targets.find((t) => t.id === next.activeTargetId);
+      if (chosen) {
+        notify('info', `Switched to ${chosen.name}`);
+      }
+    } catch (err) {
+      notify(
+        'error',
+        'Could not switch device',
+        err instanceof Error ? err.message : undefined
+      );
+    }
+  };
+
   const handlePlaybackAction = async (
     action: () => Promise<unknown>,
     errorTitle: string
@@ -71,7 +113,7 @@ function MatrixStudioApp() {
       notify(
         'error',
         errorTitle,
-        err instanceof Error ? err.message : 'Unable to reach local playlist runner.'
+        err instanceof Error ? err.message : 'Unable to reach playlist runner.'
       );
     }
   };
@@ -95,8 +137,8 @@ function MatrixStudioApp() {
           'success',
           'Configuration saved',
           playback.status.running
-            ? 'Updated config.json and hot-reloaded live playlist.'
-            : 'Updated config.json successfully.'
+            ? `Updated config.json on ${targets.activeTarget.name} and hot-reloaded live playlist.`
+            : `Updated config.json on ${targets.activeTarget.name}.`
         );
       }
     } catch (err) {
@@ -156,118 +198,164 @@ function MatrixStudioApp() {
     );
   }
 
-  if (matrix.loading || !matrix.draft) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-surface-950 text-slate-400">
-        {matrix.loadError ? (
-          <>
-            <p className="text-sm text-rose-300">{matrix.loadError}</p>
-            <Button variant="secondary" onClick={() => void matrix.reload()}>
-              Retry
-            </Button>
-          </>
-        ) : (
-          <>
-            <Loader2 className="h-6 w-6 animate-spin text-cyan-400" />
-            <span className="text-xs">Loading matrix configuration...</span>
-          </>
-        )}
-      </div>
-    );
-  }
+  const isLocalOnlySection = section === 'devices' || section === 'security';
+  const showRemoteUnlock = remoteBlocked && !isLocalOnlySection;
+
+  const dimensionsLabel = matrix.draft
+    ? `${matrix.draft.pixel_width}×${matrix.draft.pixel_height}`
+    : targets.isRemote
+      ? 'Remote'
+      : '—';
 
   return (
     <AppShell
       activeSection={section}
       onNavigate={navigate}
+      targets={targets.targets}
+      activeTarget={targets.activeTarget}
+      switchingTarget={targets.switching}
+      onSelectTarget={(id) => void handleSelectTarget(id)}
       source={matrix.source}
-      playlistCount={matrix.draft.playlist.length}
-      dimensionsLabel={`${matrix.draft.pixel_width}×${matrix.draft.pixel_height}`}
-      isDirty={matrix.isDirty}
+      playlistCount={matrix.draft?.playlist.length ?? 0}
+      dimensionsLabel={dimensionsLabel}
+      isDirty={Boolean(matrix.draft) && matrix.isDirty}
       saving={matrix.saving}
       onSave={() => void handleSave()}
       onDiscard={matrix.discard}
       onLogout={() => void auth.logout()}
       subHeader={
-        <LivePlaybackBar
-          playback={playback.status}
-          effectMap={matrix.effectMap}
-          busy={playback.busy}
-          onStart={() =>
-            void handlePlaybackAction(() => playback.start(), 'Could not start playlist')
-          }
-          onStop={() =>
-            void handlePlaybackAction(() => playback.stop(), 'Could not stop playlist')
-          }
-          onNext={() =>
-            void handlePlaybackAction(() => playback.next(), 'Could not skip effect')
-          }
-        />
+        !remoteBlocked ? (
+          <LivePlaybackBar
+            playback={playback.status}
+            effectMap={matrix.effectMap}
+            targetName={targets.activeTarget.name}
+            isRemote={targets.isRemote}
+            busy={playback.busy}
+            onStart={() =>
+              void handlePlaybackAction(() => playback.start(), 'Could not start playlist')
+            }
+            onStop={() =>
+              void handlePlaybackAction(() => playback.stop(), 'Could not stop playlist')
+            }
+            onNext={() =>
+              void handlePlaybackAction(() => playback.next(), 'Could not skip effect')
+            }
+          />
+        ) : undefined
       }
     >
-      {section === 'overview' && (
-        <OverviewPage
-          config={matrix.draft}
-          source={matrix.source}
-          updatedAt={matrix.updatedAt}
-          effects={matrix.effects}
-          onNavigate={navigate}
+      {section === 'devices' ? (
+        <DevicesPage
+          targets={targets.targets}
+          activeTargetId={targets.activeTargetId}
+          switching={targets.switching}
+          onSyncTargetsState={targets.applyTargetsState}
+          onSelectTarget={handleSelectTarget}
+          onAddTarget={targets.addTarget}
+          onRemoveTarget={targets.removeTarget}
+          onLoginTarget={targets.loginTarget}
+          onLogoutTarget={targets.logoutTarget}
+          onPushLocalConfig={targets.pushLocalConfig}
         />
-      )}
-
-      {section === 'playlist' && (
-        <PlaylistPage
-          config={matrix.draft}
-          effects={matrix.effects}
-          effectMap={matrix.effectMap}
-          fonts={matrix.fonts}
-          fieldErrors={matrix.fieldErrors}
-          playingIndex={
-            playback.status.running && playback.status.mode === 'playlist'
-              ? playback.status.currentIndex
-              : null
-          }
-          playbackBusy={playback.busy}
-          isDirty={matrix.isDirty}
-          onPlayPlaylistItem={(idx, item) => void handlePlayPlaylistItem(idx, item)}
-          onUpdateConfig={matrix.updateDraft}
-          onEffectsChanged={() => void matrix.reloadEffects()}
-        />
-      )}
-
-      {section === 'display' && (
-        <DisplayPage
-          config={matrix.draft}
-          schema={matrix.schema}
-          fieldErrors={matrix.fieldErrors}
-          onPatchField={matrix.patchField}
-        />
-      )}
-
-      {section === 'virtual' && (
-        <VirtualPage
-          config={matrix.draft}
-          fieldErrors={matrix.fieldErrors}
-          onPatchField={matrix.patchField}
-        />
-      )}
-
-      {section === 'json' && (
-        <RawJsonPage
-          config={matrix.draft}
-          configPath={matrix.configPath}
-          saving={matrix.saving}
-          onApplyDraft={(next) => matrix.updateDraft(() => next)}
-          onResetToDefaults={handleReset}
-        />
-      )}
-
-      {section === 'security' && (
+      ) : section === 'security' ? (
         <SecurityPage
           authStatus={auth.status}
           onChangePassword={auth.changePassword}
           onLogout={auth.logout}
         />
+      ) : showRemoteUnlock ? (
+        <RemoteUnlockCard
+          key={targets.activeTarget.id}
+          target={targets.activeTarget}
+          unreachableError={targets.remoteUnreachableError}
+          onLogin={async (password, setup) => {
+            await targets.loginTarget(targets.activeTarget.id, password, setup);
+            notify('success', `Connected to ${targets.activeTarget.name}`);
+          }}
+          onSwitchLocal={() => void handleSelectTarget('local')}
+          onRetry={() => targets.clearRemoteErrors()}
+        />
+      ) : matrix.loading || !matrix.draft ? (
+        <div className="flex min-h-[320px] flex-col items-center justify-center gap-3 text-slate-400">
+          {matrix.loadError ? (
+            <>
+              <p className="text-sm text-rose-300">{matrix.loadError}</p>
+              <Button variant="secondary" onClick={() => void matrix.reload()}>
+                Retry
+              </Button>
+            </>
+          ) : (
+            <>
+              <Loader2 className="h-6 w-6 animate-spin text-cyan-400" />
+              <span className="text-xs">
+                Loading configuration from {targets.activeTarget.name}...
+              </span>
+            </>
+          )}
+        </div>
+      ) : (
+        <>
+          {section === 'overview' && (
+            <OverviewPage
+              config={matrix.draft}
+              source={matrix.source}
+              updatedAt={matrix.updatedAt}
+              effects={matrix.effects}
+              isPlaying={playback.status.running}
+              targetId={targets.activeTargetId}
+              targetName={targets.activeTarget.name}
+              onApiError={targets.handleApiError}
+              onNavigate={navigate}
+            />
+          )}
+
+          {section === 'playlist' && (
+            <PlaylistPage
+              config={matrix.draft}
+              effects={matrix.effects}
+              effectMap={matrix.effectMap}
+              fonts={matrix.fonts}
+              fieldErrors={matrix.fieldErrors}
+              playingIndex={
+                playback.status.running && playback.status.mode === 'playlist'
+                  ? playback.status.currentIndex
+                  : null
+              }
+              playbackBusy={playback.busy}
+              isDirty={matrix.isDirty}
+              onPlayPlaylistItem={(idx, item) => void handlePlayPlaylistItem(idx, item)}
+              onUpdateConfig={matrix.updateDraft}
+              onEffectsChanged={() => void matrix.reloadEffects()}
+            />
+          )}
+
+          {section === 'display' && (
+            <DisplayPage
+              config={matrix.draft}
+              schema={matrix.schema}
+              fieldErrors={matrix.fieldErrors}
+              onPatchField={matrix.patchField}
+            />
+          )}
+
+          {section === 'virtual' && (
+            <VirtualPage
+              config={matrix.draft}
+              fieldErrors={matrix.fieldErrors}
+              onPatchField={matrix.patchField}
+            />
+          )}
+
+          {section === 'json' && (
+            <RawJsonPage
+              config={matrix.draft}
+              configPath={matrix.configPath}
+              saving={matrix.saving}
+              onApplyDraft={(next) => matrix.updateDraft(() => next)}
+              onResetToDefaults={handleReset}
+            />
+          )}
+        </>
       )}
     </AppShell>
   );

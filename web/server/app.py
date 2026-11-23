@@ -27,9 +27,11 @@ from .effects import discover_effects, discover_fonts
 from .media import ImageMediaStore, VideoMediaStore
 from .playback import PlaybackController
 from .router import Router
+from .targets import RemoteRequestError, RemoteUnreachableError, TargetManager
 
 
 MAX_BODY_BYTES = 10_485_760  # 10 MiB
+LOCAL_ONLY_PREFIXES = ("/api/health", "/api/auth/", "/api/targets")
 
 
 def _reject_json_constant(token: str) -> Any:
@@ -45,6 +47,7 @@ class AppContext:
         *,
         static_dir: Optional[Path] = None,
         auth_file: Optional[Path] = None,
+        targets_file: Optional[Path] = None,
         env_password: Optional[str] = None,
     ) -> None:
         self.repo_root = repo_root.resolve()
@@ -57,6 +60,9 @@ class AppContext:
         self.auth = AuthManager(
             auth_file if auth_file is not None else self.web_root / ".auth.json",
             env_password=env_password,
+        )
+        self.targets = TargetManager(
+            targets_file if targets_file is not None else self.web_root / ".targets.json"
         )
         self.config_store = ConfigStore(self.repo_root)
         self.media_store = ImageMediaStore(self.repo_root)
@@ -484,6 +490,185 @@ class AppContext:
             self.playback.notify_config_updated()
             req.send_json(self.playback.get_status())
 
+        @router.get("/api/playback/frame", require_auth=True)
+        def playback_frame(req: MatrixRequestHandler, _params: Dict[str, str]) -> None:
+            snap = self.playback.read_frame_snapshot()
+            if snap is None:
+                req.send_response(int(HTTPStatus.NO_CONTENT))
+                req._write_security_headers()
+                req.send_header("Cache-Control", "no-store")
+                req.send_header("Content-Length", "0")
+                req.end_headers()
+                return
+            width, height, rgb_bytes, mtime = snap
+            req.send_response(int(HTTPStatus.OK))
+            req._write_security_headers()
+            req.send_header("Content-Type", "application/octet-stream")
+            req.send_header("Cache-Control", "no-store")
+            req.send_header("X-Matrix-Width", str(width))
+            req.send_header("X-Matrix-Height", str(height))
+            req.send_header("X-Frame-Timestamp", f"{mtime:.3f}")
+            req.send_header("Content-Length", str(len(rgb_bytes)))
+            req.end_headers()
+            req.wfile.write(rgb_bytes)
+
+        # ---- Local-only Remote Target Management ----
+
+        @router.get("/api/targets", require_auth=True)
+        def list_targets(req: MatrixRequestHandler, _params: Dict[str, str]) -> None:
+            req.send_json(self.targets.list_targets())
+
+        @router.post("/api/targets", require_auth=True)
+        def add_target(req: MatrixRequestHandler, _params: Dict[str, str]) -> None:
+            body = req.read_json_body()
+            if body is None:
+                return
+            try:
+                created = self.targets.add_target(
+                    str(body.get("name", "")), str(body.get("url", ""))
+                )
+            except ValueError as exc:
+                req.send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            payload = self.targets.list_targets()
+            payload["target"] = created
+            req.send_json(payload, status=HTTPStatus.CREATED)
+
+        @router.post("/api/targets/test", require_auth=True)
+        def test_target_url(req: MatrixRequestHandler, _params: Dict[str, str]) -> None:
+            body = req.read_json_body()
+            if body is None:
+                return
+            try:
+                result = self.targets.test_url(str(body.get("url", "")))
+            except ValueError as exc:
+                req.send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            req.send_json(result)
+
+        @router.post("/api/targets/active", require_auth=True)
+        def set_active_target(req: MatrixRequestHandler, _params: Dict[str, str]) -> None:
+            body = req.read_json_body()
+            if body is None:
+                return
+            try:
+                state = self.targets.set_active_target(str(body.get("targetId", "")))
+            except ValueError as exc:
+                req.send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            req.send_json(state)
+
+        @router.delete("/api/targets/:id", require_auth=True)
+        def delete_target(req: MatrixRequestHandler, params: Dict[str, str]) -> None:
+            try:
+                deleted = self.targets.delete_target(params["id"])
+            except ValueError as exc:
+                req.send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            if not deleted:
+                req.send_json({"error": "Target not found."}, status=HTTPStatus.NOT_FOUND)
+                return
+            req.send_json(self.targets.list_targets())
+
+        @router.post("/api/targets/:id/test", require_auth=True)
+        def test_saved_target(req: MatrixRequestHandler, params: Dict[str, str]) -> None:
+            entry = self.targets.get_target(params["id"])
+            if not entry:
+                req.send_json({"error": "Target not found."}, status=HTTPStatus.NOT_FOUND)
+                return
+            token = entry.get("sessionToken", "")
+            result = self.targets.test_url(entry["url"], session_token=token)
+            if result.get("reachable") and not result.get("authenticated") and token:
+                self.targets.clear_target_session(entry["id"], expected_token=token)
+            result["targetsState"] = self.targets.list_targets()
+            req.send_json(result)
+
+        @router.post("/api/targets/:id/login", require_auth=True)
+        def login_remote_target(req: MatrixRequestHandler, params: Dict[str, str]) -> None:
+            body = req.read_json_body()
+            if body is None:
+                return
+            try:
+                result = self.targets.authenticate_target(
+                    params["id"],
+                    str(body.get("password", "")),
+                    setup=bool(body.get("setup", False)),
+                )
+            except ValueError as exc:
+                req.send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            except RemoteUnreachableError as exc:
+                req.send_json(
+                    {
+                        "error": str(exc),
+                        "remoteUnreachable": True,
+                        "targetId": params["id"],
+                    },
+                    status=HTTPStatus.BAD_GATEWAY,
+                )
+                return
+            except RemoteRequestError as exc:
+                extra = (
+                    {"X-Remote-Auth-Required": "1"} if exc.remote_auth_required else None
+                )
+                req.send_json(
+                    {
+                        "error": str(exc),
+                        "remoteAuthRequired": exc.remote_auth_required,
+                        "targetId": params["id"],
+                    },
+                    status=HTTPStatus(exc.status),
+                    extra_headers=extra,
+                )
+                return
+            result["targetsState"] = self.targets.list_targets()
+            req.send_json(result)
+
+        @router.post("/api/targets/:id/logout", require_auth=True)
+        def logout_remote_target(req: MatrixRequestHandler, params: Dict[str, str]) -> None:
+            try:
+                result = self.targets.logout_target(params["id"])
+            except ValueError as exc:
+                req.send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            result["targetsState"] = self.targets.list_targets()
+            req.send_json(result)
+
+        @router.post("/api/targets/:id/push-config", require_auth=True)
+        def push_local_config(req: MatrixRequestHandler, params: Dict[str, str]) -> None:
+            local_cfg = self.config_store.load()["config"]
+            try:
+                remote_resp = self.targets.push_config_to_target(params["id"], local_cfg)
+            except ValueError as exc:
+                req.send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            except PermissionError as exc:
+                req.send_json(
+                    {
+                        "error": str(exc),
+                        "remoteAuthRequired": True,
+                        "targetId": params["id"],
+                        "targetsState": self.targets.list_targets(),
+                    },
+                    status=HTTPStatus.UNAUTHORIZED,
+                    extra_headers={"X-Remote-Auth-Required": "1"},
+                )
+                return
+            except RemoteUnreachableError as exc:
+                req.send_json(
+                    {
+                        "error": str(exc),
+                        "remoteUnreachable": True,
+                        "targetId": params["id"],
+                    },
+                    status=HTTPStatus.BAD_GATEWAY,
+                )
+                return
+            except RemoteRequestError as exc:
+                req.send_json({"error": str(exc)}, status=HTTPStatus.BAD_GATEWAY)
+                return
+            req.send_json({"ok": True, "remote": remote_resp})
+
         return router
 
 
@@ -691,6 +876,31 @@ class MatrixRequestHandler(BaseHTTPRequestHandler):
                         status=HTTPStatus.UNAUTHORIZED,
                     )
                     return
+
+            # Transparently proxy target-scoped APIs to the selected remote Pi (loop-safe)
+            is_local_only = any(
+                path == prefix or path.startswith(prefix)
+                for prefix in LOCAL_ONLY_PREFIXES
+            )
+            if not is_local_only and self.headers.get("X-Led-Matrix-Proxy") != "1":
+                try:
+                    active_remote = self.ctx.targets.resolve_remote_for_request(
+                        self.headers.get("X-Matrix-Target")
+                    )
+                except ValueError as exc:
+                    self.send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                    return
+                if active_remote is not None:
+                    self.ctx.targets.proxy_request(
+                        active_remote,
+                        method,
+                        self.path,
+                        self.headers,
+                        self.rfile,
+                        self,
+                    )
+                    return
+
             try:
                 route.handler(self, params)
             except (BrokenPipeError, ConnectionResetError):
@@ -792,6 +1002,7 @@ def create_server(
     repo_root: Path,
     static_dir: Optional[Path] = None,
     auth_file: Optional[Path] = None,
+    targets_file: Optional[Path] = None,
     env_password: Optional[str] = None,
 ) -> ThreadingHTTPServer:
     httpd = ThreadingHTTPServer((host, port), MatrixRequestHandler)
@@ -800,6 +1011,7 @@ def create_server(
         repo_root=repo_root,
         static_dir=static_dir,
         auth_file=auth_file,
+        targets_file=targets_file,
         env_password=env_password,
     )
     return httpd

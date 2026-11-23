@@ -132,5 +132,36 @@ export type NavSectionId =
   | 'playlist'
   | 'display'
   | 'virtual'
+  | 'devices'
   | 'json'
   | 'security';
+
+export interface MatrixTarget {
+  id: string;
+  name: string;
+  url: string | null;
+  isLocal: boolean;
+  hasSession: boolean;
+  createdAt: number | null;
+}
+
+export interface TargetsState {
+  activeTargetId: string;
+  targets: MatrixTarget[];
+}
+
+export interface TargetProbeResult {
+  reachable: boolean;
+  url: string;
+  initialized?: boolean;
+  authenticated?: boolean;
+  envManaged?: boolean;
+  error?: string;
+}
+
+export interface LiveFrameData {
+  width: number;
+  height: number;
+  rgbBytes: Uint8Array;
+  timestamp: number;
+}

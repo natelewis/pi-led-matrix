@@ -4,8 +4,12 @@ import type {
   EffectsResponse,
   ImageFilesResponse,
   ImageUploadResponse,
+  LiveFrameData,
   MatrixConfig,
+  MatrixTarget,
   PlaybackStatus,
+  TargetProbeResult,
+  TargetsState,
   VideoFilesResponse,
   VideoUploadResponse,
 } from '@/types/matrix';
@@ -13,13 +17,42 @@ import type {
 export class ApiError extends Error {
   status: number;
   fields?: Record<string, string>;
+  remoteAuthRequired?: boolean;
+  remoteUnreachable?: boolean;
+  targetId?: string;
 
-  constructor(message: string, status: number, fields?: Record<string, string>) {
+  constructor(
+    message: string,
+    status: number,
+    fields?: Record<string, string>,
+    extra?: {
+      remoteAuthRequired?: boolean;
+      remoteUnreachable?: boolean;
+      targetId?: string;
+    }
+  ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.fields = fields;
+    this.remoteAuthRequired = extra?.remoteAuthRequired;
+    this.remoteUnreachable = extra?.remoteUnreachable;
+    this.targetId = extra?.targetId;
   }
+}
+
+let activeTargetHeaderId = 'local';
+
+export function setActiveTargetHeader(targetId: string): void {
+  activeTargetHeaderId = targetId || 'local';
+}
+
+const LOCAL_ONLY_API_PREFIXES = ['/api/health', '/api/auth/', '/api/targets'];
+
+function isTargetScopedPath(path: string): boolean {
+  return !LOCAL_ONLY_API_PREFIXES.some(
+    (prefix) => path === prefix || path.startsWith(prefix)
+  );
 }
 
 function parseResponseJson(text: string): Record<string, unknown> {
@@ -33,11 +66,16 @@ function parseResponseJson(text: string): Record<string, unknown> {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const targetHeaders: Record<string, string> = isTargetScopedPath(path)
+    ? { 'X-Matrix-Target': activeTargetHeaderId }
+    : {};
+
   const response = await fetch(path, {
     ...init,
     credentials: 'include',
     headers: {
       ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+      ...targetHeaders,
       ...init?.headers,
     },
   });
@@ -51,7 +89,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         response.statusText ||
         `Request failed (${response.status})`,
       response.status,
-      data.fields as Record<string, string> | undefined
+      data.fields as Record<string, string> | undefined,
+      {
+        remoteAuthRequired:
+          Boolean(data.remoteAuthRequired) ||
+          response.headers.get('X-Remote-Auth-Required') === '1',
+        remoteUnreachable: Boolean(data.remoteUnreachable),
+        targetId: typeof data.targetId === 'string' ? data.targetId : undefined,
+      }
     );
   }
 
@@ -118,7 +163,7 @@ export const api = {
           { method: 'DELETE' }
         ),
       previewUrl: (file: string) =>
-        `/api/effects/image/file?file=${encodeURIComponent(file)}`,
+        `/api/effects/image/file?file=${encodeURIComponent(file)}&_target=${encodeURIComponent(activeTargetHeaderId)}`,
     },
     video: {
       listFiles: () => request<VideoFilesResponse>('/api/effects/video/files'),
@@ -167,6 +212,7 @@ export const api = {
           credentials: 'include',
           headers: {
             'Content-Type': file.type || 'application/octet-stream',
+            'X-Matrix-Target': activeTargetHeaderId,
           },
           body: file,
         });
@@ -178,7 +224,14 @@ export const api = {
               response.statusText ||
               `Upload failed (${response.status})`,
             response.status,
-            data.fields as Record<string, string> | undefined
+            data.fields as Record<string, string> | undefined,
+            {
+              remoteAuthRequired:
+                Boolean(data.remoteAuthRequired) ||
+                response.headers.get('X-Remote-Auth-Required') === '1',
+              remoteUnreachable: Boolean(data.remoteUnreachable),
+              targetId: typeof data.targetId === 'string' ? data.targetId : undefined,
+            }
           );
         }
         return data as unknown as VideoUploadResponse;
@@ -189,7 +242,7 @@ export const api = {
           { method: 'DELETE' }
         ),
       previewUrl: (file: string) =>
-        `/api/effects/video/file?file=${encodeURIComponent(file)}`,
+        `/api/effects/video/file?file=${encodeURIComponent(file)}&_target=${encodeURIComponent(activeTargetHeaderId)}`,
     },
   },
 
@@ -223,6 +276,108 @@ export const api = {
       request<PlaybackStatus>('/api/playback/play', {
         method: 'POST',
         body: JSON.stringify({ effect, config: config ?? {} }),
+      }),
+    fetchFrame: async (signal?: AbortSignal): Promise<LiveFrameData | null> => {
+      const response = await fetch('/api/playback/frame', {
+        credentials: 'include',
+        cache: 'no-store',
+        headers: {
+          'X-Matrix-Target': activeTargetHeaderId,
+        },
+        signal,
+      });
+      if (response.status === 204) return null;
+      if (!response.ok) {
+        const text = await response.text();
+        const data = parseResponseJson(text);
+        throw new ApiError(
+          (typeof data.error === 'string' && data.error) ||
+            response.statusText ||
+            `Frame fetch failed (${response.status})`,
+          response.status,
+          undefined,
+          {
+            remoteAuthRequired:
+              Boolean(data.remoteAuthRequired) ||
+              response.headers.get('X-Remote-Auth-Required') === '1',
+            remoteUnreachable: Boolean(data.remoteUnreachable),
+            targetId: typeof data.targetId === 'string' ? data.targetId : undefined,
+          }
+        );
+      }
+      const width = parseInt(response.headers.get('X-Matrix-Width') || '0', 10);
+      const height = parseInt(response.headers.get('X-Matrix-Height') || '0', 10);
+      const timestamp = parseFloat(response.headers.get('X-Frame-Timestamp') || '0');
+      const buf = await response.arrayBuffer();
+      if (
+        width <= 0 ||
+        height <= 0 ||
+        width > 1024 ||
+        height > 1024 ||
+        buf.byteLength !== width * height * 3
+      ) {
+        return null;
+      }
+      return {
+        width,
+        height,
+        rgbBytes: new Uint8Array(buf),
+        timestamp,
+      };
+    },
+  },
+
+  targets: {
+    list: () => request<TargetsState>('/api/targets'),
+    add: (name: string, url: string) =>
+      request<TargetsState & { target: MatrixTarget }>('/api/targets', {
+        method: 'POST',
+        body: JSON.stringify({ name, url }),
+      }),
+    remove: (id: string) =>
+      request<TargetsState>(`/api/targets/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      }),
+    testUrl: (url: string) =>
+      request<TargetProbeResult>('/api/targets/test', {
+        method: 'POST',
+        body: JSON.stringify({ url }),
+      }),
+    testSaved: (id: string) =>
+      request<TargetProbeResult & { targetsState?: TargetsState }>(
+        `/api/targets/${encodeURIComponent(id)}/test`,
+        {
+          method: 'POST',
+          body: JSON.stringify({}),
+        }
+      ),
+    setActive: (targetId: string) =>
+      request<TargetsState>('/api/targets/active', {
+        method: 'POST',
+        body: JSON.stringify({ targetId }),
+      }),
+    login: (id: string, password: string, setup = false) =>
+      request<{
+        authenticated: boolean;
+        target: MatrixTarget;
+        targetsState: TargetsState;
+      }>(`/api/targets/${encodeURIComponent(id)}/login`, {
+        method: 'POST',
+        body: JSON.stringify({ password, setup }),
+      }),
+    logout: (id: string) =>
+      request<{
+        authenticated: boolean;
+        target: MatrixTarget;
+        targetsState: TargetsState;
+      }>(`/api/targets/${encodeURIComponent(id)}/logout`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      }),
+    pushConfig: (id: string) =>
+      request<{ ok: boolean }>(`/api/targets/${encodeURIComponent(id)}/push-config`, {
+        method: 'POST',
+        body: JSON.stringify({}),
       }),
   },
 };

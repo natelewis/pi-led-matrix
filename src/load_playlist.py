@@ -293,6 +293,7 @@ def main_loop():
         except KeyboardInterrupt:
             pass
         finally:
+            runtime_ipc.clear_frame_snapshot()
             publish_state("stopped", "stopped")
             shared_matrix.close()
     else:
@@ -339,6 +340,7 @@ def main_loop():
                 if active_proc.is_alive():
                     active_proc.kill()
                     active_proc.join(timeout=1.0)
+            runtime_ipc.clear_frame_snapshot()
             publish_state("stopped", "stopped")
 
 

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import struct
 import subprocess
 import sys
 import tempfile
@@ -11,7 +13,7 @@ import threading
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from .config_store import is_safe_relative_media_path
 from .effects import discover_effects
@@ -20,8 +22,21 @@ from .effects import discover_effects
 RUNTIME_DIRNAME = "_runtime"
 STATE_FILENAME = "state.json"
 COMMAND_FILENAME = "command.json"
+FRAME_FILENAME = "frame.bin"
+MIRROR_LEASE_FILENAME = "mirror.lease"
 LOG_FILENAME = "playlist.log"
 HEARTBEAT_STALE_SECONDS = 12.0
+FRAME_STALE_SECONDS = 6.0
+MAX_MIRROR_DIMENSION = 1024
+MAX_MIRROR_BYTES = 4 + MAX_MIRROR_DIMENSION * MAX_MIRROR_DIMENSION * 3
+
+
+def _resolve_mirror_dir(repo_root: Path) -> Path:
+    shm = Path("/dev/shm")
+    if shm.is_dir() and os.access(shm, os.W_OK | os.X_OK):
+        digest = hashlib.sha256(str(repo_root.resolve()).encode("utf-8")).hexdigest()[:12]
+        return shm / f"pi-led-matrix-{digest}"
+    return repo_root / RUNTIME_DIRNAME
 
 
 def _pid_alive(pid: int, updated_at: float) -> bool:
@@ -50,6 +65,9 @@ class PlaybackController:
         self.runtime_dir = self.repo_root / RUNTIME_DIRNAME
         self.state_path = self.runtime_dir / STATE_FILENAME
         self.command_path = self.runtime_dir / COMMAND_FILENAME
+        self.mirror_dir = _resolve_mirror_dir(self.repo_root)
+        self.frame_path = self.mirror_dir / FRAME_FILENAME
+        self.mirror_lease_path = self.mirror_dir / MIRROR_LEASE_FILENAME
         self.log_path = self.runtime_dir / LOG_FILENAME
         self._lock = threading.Lock()
         self._proc: Optional[subprocess.Popen[bytes]] = None
@@ -66,6 +84,10 @@ class PlaybackController:
                 with os.fdopen(fd, "w", encoding="utf-8") as handle:
                     json.dump(payload, handle, indent=2, allow_nan=False)
                     handle.write("\n")
+                try:
+                    os.chmod(tmp_path, 0o664)
+                except OSError:
+                    pass
                 os.replace(tmp_path, path)
             except Exception:
                 tmp_path.unlink(missing_ok=True)
@@ -361,6 +383,52 @@ class PlaybackController:
                     self._send_command_locked("reload")
                 except RuntimeError:
                     pass
+
+    def _touch_mirror_lease(self) -> None:
+        try:
+            self.mirror_dir.mkdir(parents=True, exist_ok=True)
+            flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+            fd = os.open(str(self.mirror_lease_path), flags, 0o664)
+            os.close(fd)
+            os.utime(self.mirror_lease_path, None)
+        except OSError:
+            pass
+
+    def read_frame_snapshot(self) -> Optional[Tuple[int, int, bytes, float]]:
+        """Touch the live-mirror lease and return (width, height, rgb_bytes, mtime) if fresh."""
+        self._touch_mirror_lease()
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            fd = os.open(str(self.frame_path), flags)
+        except OSError:
+            return None
+        try:
+            stat = os.fstat(fd)
+            if (time.time() - stat.st_mtime) > FRAME_STALE_SECONDS:
+                return None
+            if stat.st_size < 4 or stat.st_size > MAX_MIRROR_BYTES:
+                return None
+            with os.fdopen(fd, "rb") as handle:
+                fd = -1
+                raw = handle.read(MAX_MIRROR_BYTES + 1)
+        except OSError:
+            return None
+        finally:
+            if fd >= 0:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+
+        if len(raw) < 4 or len(raw) > MAX_MIRROR_BYTES:
+            return None
+        width, height = struct.unpack(">HH", raw[:4])
+        if not (1 <= width <= MAX_MIRROR_DIMENSION and 1 <= height <= MAX_MIRROR_DIMENSION):
+            return None
+        rgb = raw[4:]
+        if len(rgb) != width * height * 3:
+            return None
+        return width, height, rgb, stat.st_mtime
 
     def shutdown(self) -> None:
         with self._lock:

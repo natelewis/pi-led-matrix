@@ -1,0 +1,20 @@
+[Unit]
+Description=Raspberry Pi LED Matrix Studio Web Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+UMask=0002
+WorkingDirectory=/home/pi/pi-led-matrix
+ExecStart=/usr/bin/python3 -m web.server.app --host 0.0.0.0 --port 8080
+Restart=on-failure
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+# Optional: load LED_MATRIX_PASSWORD from a root/pi-only 0600 file instead of inline Environment=
+# EnvironmentFile=-/etc/pi-led-matrix-web.env
+
+[Install]
+WantedBy=multi-user.target

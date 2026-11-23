@@ -5,15 +5,21 @@ import {
   Menu,
   RotateCcw,
   Save,
+  Server,
   X,
 } from 'lucide-react';
 import { Badge, Button } from '@/components/ui';
+import { TargetSwitcher } from '@/components/config/TargetSwitcher';
 import { NAV_ITEMS } from './navItems';
-import type { NavSectionId } from '@/types/matrix';
+import type { MatrixTarget, NavSectionId } from '@/types/matrix';
 
 export interface AppShellProps {
   activeSection: NavSectionId;
   onNavigate: (section: NavSectionId) => void;
+  targets: MatrixTarget[];
+  activeTarget: MatrixTarget;
+  switchingTarget?: boolean;
+  onSelectTarget: (targetId: string) => void;
   source: 'custom' | 'default';
   playlistCount: number;
   dimensionsLabel: string;
@@ -29,6 +35,10 @@ export interface AppShellProps {
 export function AppShell({
   activeSection,
   onNavigate,
+  targets,
+  activeTarget,
+  switchingTarget = false,
+  onSelectTarget,
   source,
   playlistCount,
   dimensionsLabel,
@@ -111,6 +121,18 @@ export function AppShell({
         </div>
       </div>
 
+      {/* Active Target / Remote Pi Switcher */}
+      <TargetSwitcher
+        targets={targets}
+        activeTarget={activeTarget}
+        switching={switchingTarget}
+        onSelect={(id) => {
+          setMobileOpen(false);
+          onSelectTarget(id);
+        }}
+        onManageDevices={() => handleSelect('devices')}
+      />
+
       {/* Navigation */}
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-5">
         {renderNavGroup('Configuration', workspaceItems)}
@@ -175,7 +197,13 @@ export function AppShell({
             >
               <Menu className="h-5 w-5" />
             </button>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {!activeTarget.isLocal && (
+                <Badge tone="violet">
+                  <Server className="h-3 w-3" />
+                  Remote: {activeTarget.name}
+                </Badge>
+              )}
               <Badge tone={source === 'custom' ? 'emerald' : 'amber'}>
                 {source === 'custom' ? 'Custom config.json' : 'Default config'}
               </Badge>

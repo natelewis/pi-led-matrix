@@ -4,6 +4,7 @@ import type { PlaybackStatus } from '@/types/matrix';
 
 interface UsePlaybackOptions {
   enabled: boolean;
+  targetKey?: string;
   onUnauthorized?: (err: unknown) => boolean;
 }
 
@@ -23,10 +24,16 @@ const DEFAULT_STATUS: PlaybackStatus = {
   virtual: null,
 };
 
-export function usePlayback({ enabled, onUnauthorized }: UsePlaybackOptions) {
+export function usePlayback({
+  enabled,
+  targetKey = 'local',
+  onUnauthorized,
+}: UsePlaybackOptions) {
   const [status, setStatus] = useState<PlaybackStatus>(DEFAULT_STATUS);
   const [busy, setBusy] = useState(false);
   const followUpTimerRef = useRef<number | null>(null);
+  const inFlightRef = useRef(false);
+  const epochRef = useRef(0);
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
 
@@ -38,21 +45,30 @@ export function usePlayback({ enabled, onUnauthorized }: UsePlaybackOptions) {
   }, []);
 
   const poll = useCallback(async () => {
-    if (!enabledRef.current) return;
+    if (!enabledRef.current || inFlightRef.current) return;
+    const epoch = epochRef.current;
+    inFlightRef.current = true;
     try {
       const next = await api.playback.status();
-      if (enabledRef.current) {
+      if (enabledRef.current && epoch === epochRef.current) {
         setStatus(next);
       }
     } catch (err) {
-      onUnauthorized?.(err);
+      if (epoch === epochRef.current) {
+        onUnauthorized?.(err);
+      }
+    } finally {
+      inFlightRef.current = false;
     }
   }, [onUnauthorized]);
 
   useEffect(() => {
+    epochRef.current += 1;
+    inFlightRef.current = false;
+    clearFollowUpTimer();
+    setStatus(DEFAULT_STATUS);
+
     if (!enabled) {
-      clearFollowUpTimer();
-      setStatus(DEFAULT_STATUS);
       return;
     }
 
@@ -64,10 +80,11 @@ export function usePlayback({ enabled, onUnauthorized }: UsePlaybackOptions) {
     }, 1500);
 
     return () => {
+      epochRef.current += 1;
       window.clearInterval(timer);
       clearFollowUpTimer();
     };
-  }, [enabled, poll, clearFollowUpTimer]);
+  }, [enabled, targetKey, poll, clearFollowUpTimer]);
 
   const runAction = useCallback(
     async (fn: () => Promise<PlaybackStatus>) => {

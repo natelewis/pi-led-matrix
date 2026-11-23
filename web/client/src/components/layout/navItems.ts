@@ -3,6 +3,7 @@ import {
   LayoutDashboard,
   ListMusic,
   Monitor,
+  Server,
   Shield,
   SlidersHorizontal,
   type LucideIcon,
@@ -49,6 +50,13 @@ export const NAV_ITEMS: NavItem[] = [
     description: 'Desktop / monitor preview options',
     icon: Monitor,
     group: 'workspace',
+  },
+  {
+    id: 'devices',
+    label: 'Devices & Remote',
+    description: 'Connect & control remote Raspberry Pis',
+    icon: Server,
+    group: 'system',
   },
   {
     id: 'json',

@@ -4,7 +4,8 @@ A self-contained local web server and React frontend for configuring and control
 
 ## Features
 
-- **Live Playback Control**: Start/stop the local playlist runner, skip effects in real time, jump directly to any playlist item with **Play Now**, and hot-reload `config.json` edits into a running playlist without restarting.
+- **Remote Sessions & Multi-Device Studio**: Connect your local Mac Studio to one or more remote Raspberry Pis over LAN via a built-in authenticated reverse proxy (zero CORS/cookie issues), switch devices from the sidebar, push your local `config.json` straight to a Pi, and watch a **Live Matrix Mirror** (~6–7 FPS pixel stream) of what's playing in the other room.
+- **Live Playback Control**: Start/stop the playlist runner, skip effects in real time, jump directly to any playlist item with **Play Now**, and hot-reload `config.json` edits into a running playlist without restarting.
 - **Playlist Builder**: Drag-and-drop or button-based ordering, effect duplication (to weight random playback), searchable auto-discovered catalog from `src/effects/`, one-click terminal `make run ...` command copying, and per-effect editors (`marquee`, `image`, `video`, or custom JSON).
 - **Smart Image & Video Uploaders**: Upload images or videos directly to gitignored `_uploads/` folders (`src/effects/image/_uploads/` and `src/effects/video/_uploads/`), automatically sized to your matrix `pixel_width × pixel_height` with saliency-guided smart cropping, drag-to-adjust framing, zoom, optional video trim, and live LED dot previews.
 - **Display & Hardware Config**: Live proportional LED layout preview, resolution presets (`128 × 72` default), GPIO pin multi-selector (`D10`, `D12`, `D18`, `D21`) with panel-split validation, alternating zigzag wiring toggle, RGB channel order selector, and brightness/contrast/color sliders.
@@ -26,6 +27,10 @@ A self-contained local web server and React frontend for configuring and control
 | Raw JSON | Security |
 | --- | --- |
 | ![Raw JSON](docs/screenshots/json.png) | ![Security](docs/screenshots/security.png) |
+
+| Devices & Remote Sessions |
+| --- |
+| ![Devices & Remote](docs/screenshots/devices.png) |
 
 ## Quick Start
 
