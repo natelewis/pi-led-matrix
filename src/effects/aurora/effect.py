@@ -6,6 +6,26 @@ import time
 import numpy as np
 from PIL import Image
 
+CONFIG_SCHEMA = [
+    {
+        "key": "speed",
+        "label": "Animation Speed",
+        "type": "number",
+        "default": 1.0,
+        "min": 0.1,
+        "max": 5.0,
+        "step": 0.1,
+        "unit": "×",
+    },
+    {
+        "key": "stars",
+        "label": "Twinkling Stars",
+        "type": "boolean",
+        "default": True,
+        "description": "Render subtle twinkling stars behind the aurora curtains.",
+    },
+]
+
 
 def run(matrix, config):
     """Shimmering Northern Lights curtains over a twinkling night sky."""
@@ -79,8 +99,12 @@ def run(matrix, config):
         )
 
         # Vertical shimmering rays dancing along the curtains
-        rays1 = 0.62 + 0.38 * np.sin(x * 24.0 + np.sin(x * 6.0 + t * 0.8) * 2.2 - t * 1.7)
-        rays2 = 0.58 + 0.42 * np.sin(x * 19.0 - np.cos(x * 5.0 - t * 0.7) * 1.9 + t * 1.3)
+        rays1 = 0.62 + 0.38 * np.sin(
+            x * 24.0 + np.sin(x * 6.0 + t * 0.8) * 2.2 - t * 1.7
+        )
+        rays2 = 0.58 + 0.42 * np.sin(
+            x * 19.0 - np.cos(x * 5.0 - t * 0.7) * 1.9 + t * 1.3
+        )
 
         glow1 = np.clip(curtain1 * rays1 * 1.55, 0.0, 1.3)
         glow2 = np.clip(curtain2 * rays2 * 1.15, 0.0, 1.1)
@@ -90,8 +114,12 @@ def run(matrix, config):
         alt1 = np.clip(dy1 / 0.42, 0.0, 1.0)
         alt2 = np.clip(dy2 / 0.38, 0.0, 1.0)
 
-        r = sky_r + glow1 * (30.0 + 185.0 * (alt1 ** 1.7)) + glow2 * (95.0 + 145.0 * alt2)
-        g = sky_g + glow1 * (245.0 * (1.0 - 0.65 * alt1)) + glow2 * (190.0 * (1.0 - 0.55 * alt2))
+        r = sky_r + glow1 * (30.0 + 185.0 * (alt1**1.7)) + glow2 * (95.0 + 145.0 * alt2)
+        g = (
+            sky_g
+            + glow1 * (245.0 * (1.0 - 0.65 * alt1))
+            + glow2 * (190.0 * (1.0 - 0.55 * alt2))
+        )
         b = sky_b + glow1 * (115.0 + 130.0 * alt1) + glow2 * (175.0 + 75.0 * alt2)
 
         if show_stars:

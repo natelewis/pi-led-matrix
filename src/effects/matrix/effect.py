@@ -6,6 +6,23 @@
 import random
 from operator import itemgetter
 
+CONFIG_SCHEMA = [
+    {
+        "key": "color",
+        "label": "Rain Color",
+        "type": "color",
+        "default": "#008000",
+        "description": "Color of the falling digital rain streams.",
+    },
+    {
+        "key": "background",
+        "label": "Background Color",
+        "type": "color",
+        "default": "#000000",
+        "description": "Backdrop color behind the falling rain.",
+    },
+]
+
 
 def run(matrix, config):
     """Matrix"""
@@ -13,6 +30,7 @@ def run(matrix, config):
     min_y = 0
     max_y = config["pixel_height"]
     max_x = config["pixel_width"]
+    effect_cfg = config.get("effect") or {}
 
     # max speed of line movement
     max_speed = 6
@@ -20,8 +38,14 @@ def run(matrix, config):
     # percent chance each pixel in a line goes missing to simulate static
     percent_static = 0.20
 
-    matrix_color = matrix.color("green")
-    background_color = matrix.color("black")
+    matrix_color = matrix.parse_color(
+        effect_cfg.get("color") if isinstance(effect_cfg, dict) else None,
+        matrix.color("green"),
+    )
+    background_color = matrix.parse_color(
+        effect_cfg.get("background") if isinstance(effect_cfg, dict) else None,
+        matrix.color("black"),
+    )
 
     # create a new matrix line about to drop down
     def new_line():

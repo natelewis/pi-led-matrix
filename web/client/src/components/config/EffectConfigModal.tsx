@@ -22,6 +22,11 @@ import {
   useToast,
 } from '@/components/ui';
 import { ImageUploadCropper } from '@/components/config/ImageUploadCropper';
+import {
+  buildInitialFieldValues,
+  SchemaFieldsEditor,
+  serializeFieldValues,
+} from '@/components/config/SchemaFieldsEditor';
 import { VideoUploadCropper } from '@/components/config/VideoUploadCropper';
 import { buildEffectRunCommand, copyToClipboard } from '@/utils/cliCommand';
 import type {
@@ -90,10 +95,18 @@ export function EffectConfigModal({
 }: EffectConfigModalProps) {
   const { notify } = useToast();
   const schema = effectMeta?.configSchema ?? 'none';
+  const configFields = useMemo(
+    () => effectMeta?.configFields ?? [],
+    [effectMeta]
+  );
   const defaultFont = fonts[0] ?? 'dosis.ttf';
 
   const [messages, setMessages] = useState<MarqueeMessage[]>([]);
   const [fileName, setFileName] = useState('');
+  const [fieldValues, setFieldValues] = useState<
+    Record<string, string | number | boolean>
+  >({});
+  const [extraConfig, setExtraConfig] = useState<Record<string, unknown>>({});
   const [rawJson, setRawJson] = useState('{}');
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [useRawMode, setUseRawMode] = useState(false);
@@ -129,16 +142,34 @@ export function EffectConfigModal({
       }
     } else if (schema === 'marquee') {
       cfg = { messages };
-    } else if (schema === 'image' || schema === 'video') {
+    } else if (schema === 'image') {
       cfg = fileName.trim() ? { file: fileName.trim() } : undefined;
+    } else if (schema === 'video') {
+      const merged = serializeFieldValues(configFields, fieldValues, extraConfig);
+      if (fileName.trim()) {
+        merged.file = fileName.trim();
+      } else {
+        delete merged.file;
+      }
+      cfg = Object.keys(merged).length > 0 ? merged : undefined;
+    } else if (schema === 'fields') {
+      const serialized = serializeFieldValues(configFields, fieldValues, extraConfig);
+      cfg = Object.keys(serialized).length > 0 ? serialized : undefined;
     }
     return buildEffectRunCommand({ effect: item.effect, config: cfg });
-  }, [item, useRawMode, schema, rawJson, messages, fileName]);
+  }, [item, useRawMode, schema, rawJson, messages, fileName, configFields, fieldValues, extraConfig]);
 
   useEffect(() => {
     if (!open || !item) return;
     setJsonError(null);
     const existing = item.config ?? {};
+    setExtraConfig(existing);
+
+    if (configFields.length > 0) {
+      setFieldValues(buildInitialFieldValues(configFields, existing));
+    } else {
+      setFieldValues({});
+    }
 
     if (schema === 'marquee') {
       const existingMsgs = Array.isArray(existing.messages)
@@ -161,12 +192,14 @@ export function EffectConfigModal({
     } else if (schema === 'image' || schema === 'video') {
       setFileName(typeof existing.file === 'string' ? existing.file : '');
       setUseRawMode(false);
+    } else if (schema === 'fields' && configFields.length > 0) {
+      setUseRawMode(false);
     } else {
       setUseRawMode(true);
     }
 
     setRawJson(JSON.stringify(existing, null, 2));
-  }, [open, item, schema, defaultFont]);
+  }, [open, item, schema, configFields, defaultFont]);
 
   useEffect(() => {
     if (!open || schema !== 'image') return;
@@ -242,7 +275,23 @@ export function EffectConfigModal({
         setJsonError('Add at least one marquee message.');
         return;
       }
-      onSave({ ...(item.config ?? {}), messages: filtered });
+      onSave({ ...extraConfig, messages: filtered });
+      onClose();
+      return;
+    }
+
+    if (schema === 'fields') {
+      for (const field of configFields) {
+        if (field.required) {
+          const val = fieldValues[field.key];
+          if (val === undefined || val === null || String(val).trim() === '') {
+            setJsonError(`${field.label} is required.`);
+            return;
+          }
+        }
+      }
+      const serialized = serializeFieldValues(configFields, fieldValues, extraConfig);
+      onSave(Object.keys(serialized).length > 0 ? serialized : undefined);
       onClose();
       return;
     }
@@ -253,7 +302,13 @@ export function EffectConfigModal({
         setJsonError(`Enter a ${schema} filename.`);
         return;
       }
-      onSave({ ...(item.config ?? {}), file: trimmed });
+      if (schema === 'video' && configFields.length > 0) {
+        const merged = serializeFieldValues(configFields, fieldValues, extraConfig);
+        merged.file = trimmed;
+        onSave(merged);
+      } else {
+        onSave({ ...extraConfig, file: trimmed });
+      }
       onClose();
     }
   };
@@ -282,10 +337,23 @@ export function EffectConfigModal({
               className="mr-auto"
               onClick={() => {
                 if (!useRawMode) {
-                  const previewObj =
-                    schema === 'marquee'
-                      ? { ...(item.config ?? {}), messages }
-                      : { ...(item.config ?? {}), file: fileName };
+                  let previewObj: Record<string, unknown>;
+                  if (schema === 'marquee') {
+                    previewObj = { ...extraConfig, messages };
+                  } else if (schema === 'fields') {
+                    previewObj = serializeFieldValues(
+                      configFields,
+                      fieldValues,
+                      extraConfig
+                    );
+                  } else if (schema === 'video' && configFields.length > 0) {
+                    previewObj = {
+                      ...serializeFieldValues(configFields, fieldValues, extraConfig),
+                      file: fileName,
+                    };
+                  } else {
+                    previewObj = { ...extraConfig, file: fileName };
+                  }
                   setRawJson(JSON.stringify(previewObj, null, 2));
                   setUseRawMode(true);
                   setJsonError(null);
@@ -296,9 +364,11 @@ export function EffectConfigModal({
                       setJsonError('Fix invalid JSON object before switching back to Form Editor.');
                       return;
                     }
-                    if (schema === 'marquee' && Array.isArray(parsed.messages)) {
+                    const parsedObj = parsed as Record<string, unknown>;
+                    setExtraConfig(parsedObj);
+                    if (schema === 'marquee' && Array.isArray(parsedObj.messages)) {
                       setMessages(
-                        parsed.messages.map((m: Record<string, unknown>) => ({
+                        parsedObj.messages.map((m: Record<string, unknown>) => ({
                           left: Number(m.left ?? 0),
                           right: Number(m.right ?? 5),
                           r: Number(m.r ?? 255),
@@ -308,8 +378,15 @@ export function EffectConfigModal({
                           font: String(m.font ?? defaultFont),
                         }))
                       );
-                    } else if ((schema === 'image' || schema === 'video') && typeof parsed.file === 'string') {
-                      setFileName(parsed.file);
+                    } else if (schema === 'image' || schema === 'video') {
+                      if (typeof parsedObj.file === 'string') {
+                        setFileName(parsedObj.file);
+                      }
+                      if (schema === 'video' && configFields.length > 0) {
+                        setFieldValues(buildInitialFieldValues(configFields, parsedObj));
+                      }
+                    } else if (schema === 'fields') {
+                      setFieldValues(buildInitialFieldValues(configFields, parsedObj));
                     }
                     setUseRawMode(false);
                     setJsonError(null);
@@ -791,9 +868,40 @@ export function EffectConfigModal({
                     }}
                   />
                 </Field>
+
+                {configFields.length > 0 && (
+                  <SchemaFieldsEditor
+                    heading="Playback Options"
+                    fields={configFields}
+                    values={fieldValues}
+                    onChange={(key, val) => {
+                      setFieldValues((prev) => ({ ...prev, [key]: val }));
+                      setJsonError(null);
+                    }}
+                    onResetDefaults={() => {
+                      setFieldValues(buildInitialFieldValues(configFields));
+                      setJsonError(null);
+                    }}
+                  />
+                )}
               </div>
             )}
           </div>
+        )}
+
+        {!useRawMode && schema === 'fields' && configFields.length > 0 && (
+          <SchemaFieldsEditor
+            fields={configFields}
+            values={fieldValues}
+            onChange={(key, val) => {
+              setFieldValues((prev) => ({ ...prev, [key]: val }));
+              setJsonError(null);
+            }}
+            onResetDefaults={() => {
+              setFieldValues(buildInitialFieldValues(configFields));
+              setJsonError(null);
+            }}
+          />
         )}
 
         {(useRawMode || schema === 'none') && (

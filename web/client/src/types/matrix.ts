@@ -50,7 +50,29 @@ export interface ConfigResponse {
 }
 
 export type EffectCategory = 'animation' | 'game' | 'media' | 'text' | 'utility';
-export type EffectConfigSchema = 'none' | 'marquee' | 'image' | 'video';
+export type EffectConfigSchema = 'none' | 'fields' | 'marquee' | 'image' | 'video';
+export type EffectConfigFieldType = 'select' | 'number' | 'boolean' | 'text' | 'color';
+
+export interface EffectConfigFieldOption {
+  value: string;
+  label: string;
+}
+
+export interface EffectConfigField {
+  key: string;
+  label: string;
+  type: EffectConfigFieldType;
+  description?: string;
+  required?: boolean;
+  default?: string | number | boolean;
+  options?: EffectConfigFieldOption[];
+  min?: number;
+  max?: number;
+  step?: number;
+  integer?: boolean;
+  unit?: string;
+  placeholder?: string;
+}
 
 export interface EffectMeta {
   id: string;
@@ -58,6 +80,8 @@ export interface EffectMeta {
   description: string;
   category: EffectCategory;
   configSchema: EffectConfigSchema;
+  requiresConfig?: boolean;
+  configFields?: EffectConfigField[];
   isUtility: boolean;
   availableFiles?: string[];
 }

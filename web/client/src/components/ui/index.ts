@@ -4,6 +4,8 @@ export { Button } from './Button';
 export type { ButtonProps, ButtonSize, ButtonVariant } from './Button';
 export { Card, CardContent, CardFooter, CardHeader } from './Card';
 export type { CardHeaderProps, CardProps } from './Card';
+export { ColorPicker, normalizeHexColor } from './ColorPicker';
+export type { ColorPickerProps } from './ColorPicker';
 export { ConfirmDialog } from './ConfirmDialog';
 export type { ConfirmDialogProps } from './ConfirmDialog';
 export { EmptyState } from './EmptyState';

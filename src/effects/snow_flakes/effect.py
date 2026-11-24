@@ -12,6 +12,56 @@ SIXTY_DEG = math.pi / 3.0
 SQRT3_HALF = math.sqrt(3.0) * 0.5
 ROTATION_STEPS = 15
 
+CONFIG_SCHEMA = [
+    {
+        "key": "palette",
+        "label": "Palette",
+        "type": "select",
+        "default": "winter",
+        "description": "Color palette for the winter sky, snowflakes, and snowdrift.",
+        "options": [
+            {"value": "winter", "label": "Winter"},
+            {"value": "aurora", "label": "Aurora"},
+            {"value": "warm", "label": "Warm"},
+        ],
+    },
+    {
+        "key": "speed",
+        "label": "Fall Speed",
+        "type": "number",
+        "default": 1.0,
+        "min": 0.2,
+        "max": 3.0,
+        "step": 0.1,
+        "unit": "×",
+    },
+    {
+        "key": "wind",
+        "label": "Wind Strength",
+        "type": "number",
+        "default": 1.0,
+        "min": 0.0,
+        "max": 3.0,
+        "step": 0.1,
+    },
+    {
+        "key": "density",
+        "label": "Snowflake Density",
+        "type": "number",
+        "default": 1.0,
+        "min": 0.3,
+        "max": 2.5,
+        "step": 0.1,
+    },
+    {
+        "key": "drift",
+        "label": "Snowdrift Accumulation",
+        "type": "boolean",
+        "default": True,
+        "description": "Show the moonlit bottom snowbank and landing crystal sparkles.",
+    },
+]
+
 # Curated color palettes tuned to look rich under default LED contrast/color enhancement
 PALETTES = {
     "winter": {
