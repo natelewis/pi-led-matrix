@@ -21,11 +21,35 @@ export function extractMediaShortName(filePath: string, maxLength = 32): string 
 
 /**
  * Extracts the combined single-line text from a configured marquee effect.
- * Returns null if no non-empty messages are configured.
+ * Supports both new declarative configs (`text` / `lines[]`) and legacy `messages[]`.
+ * Returns null if no non-empty text is configured.
  */
 export function extractMarqueeText(item: PlaylistItem): string | null {
   if (item.effect !== 'marquee') return null;
-  const rawMessages = item.config?.messages;
+  const cfg = item.config;
+  if (!cfg || typeof cfg !== 'object') return null;
+
+  if (cfg.content_mode === 'layers' && Array.isArray(cfg.lines)) {
+    const parts = cfg.lines
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') return '';
+        const text = (entry as Record<string, unknown>).text;
+        return typeof text === 'string' ? text.replace(/\s+/g, ' ').trim() : '';
+      })
+      .filter(Boolean);
+    if (parts.length > 0) return parts.join(' · ');
+  }
+
+  if (typeof cfg.text === 'string' && cfg.text.trim().length > 0) {
+    const cleaned = cfg.text
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && l !== '---')
+      .join(' · ');
+    if (cleaned) return cleaned;
+  }
+
+  const rawMessages = cfg.messages;
   if (!Array.isArray(rawMessages)) return null;
 
   const parts = rawMessages

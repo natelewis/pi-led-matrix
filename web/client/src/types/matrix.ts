@@ -51,27 +51,114 @@ export interface ConfigResponse {
 
 export type EffectCategory = 'animation' | 'game' | 'media' | 'text' | 'utility';
 export type EffectConfigSchema = 'none' | 'fields' | 'marquee' | 'image' | 'video';
-export type EffectConfigFieldType = 'select' | 'number' | 'boolean' | 'text' | 'color';
+export type EffectConfigFieldType =
+  | 'select'
+  | 'number'
+  | 'boolean'
+  | 'text'
+  | 'textarea'
+  | 'color'
+  | 'font'
+  | 'alignment'
+  | 'list';
 
 export interface EffectConfigFieldOption {
   value: string;
   label: string;
 }
 
+export interface EffectConfigFieldShowWhen {
+  key: string;
+  equals?: unknown;
+  notEquals?: unknown;
+  in?: unknown[];
+  gt?: number;
+  truthy?: boolean;
+}
+
+export interface EffectConfigTokenOption {
+  token: string;
+  label: string;
+}
+
+export type EffectFieldValue =
+  | string
+  | number
+  | boolean
+  | Record<string, unknown>[];
+
 export interface EffectConfigField {
   key: string;
   label: string;
   type: EffectConfigFieldType;
   description?: string;
+  section?: string;
+  showWhen?: EffectConfigFieldShowWhen;
   required?: boolean;
-  default?: string | number | boolean;
+  default?: EffectFieldValue;
   options?: EffectConfigFieldOption[];
   min?: number;
   max?: number;
   step?: number;
   integer?: boolean;
+  allowAuto?: boolean;
   unit?: string;
   placeholder?: string;
+  tokens?: EffectConfigTokenOption[];
+  previewTextKey?: string;
+  mode?: 'horizontal' | 'grid';
+  itemFields?: EffectConfigField[];
+  itemLabel?: string;
+  addLabel?: string;
+  minItems?: number;
+  maxItems?: number;
+  reorderable?: boolean;
+}
+
+export interface EffectConfigPreset {
+  id: string;
+  label: string;
+  description?: string;
+  config: Record<string, unknown>;
+}
+
+export interface FontMeta {
+  id: string;
+  file: string;
+  name: string;
+  category: string;
+  description: string;
+  minHeight: number;
+  recommendedMinSize: number;
+  crispDefault: boolean;
+  variation?: string | null;
+  cssWeight?: number;
+  builtin: boolean;
+  uploaded: boolean;
+  license?: string;
+  sizeBytes: number;
+}
+
+export interface EffectPreviewDiagnosticAction {
+  label: string;
+  patch: Record<string, unknown>;
+}
+
+export interface EffectPreviewDiagnostic {
+  level: 'ok' | 'info' | 'warn';
+  message: string;
+  actions?: EffectPreviewDiagnosticAction[];
+}
+
+export interface EffectPreviewResponse {
+  effect: string;
+  width: number;
+  height: number;
+  fps: number;
+  frameCount: number;
+  framesBase64: string;
+  diagnostics: EffectPreviewDiagnostic[];
+  summary?: Record<string, unknown>;
 }
 
 export interface EffectMeta {
@@ -82,6 +169,8 @@ export interface EffectMeta {
   configSchema: EffectConfigSchema;
   requiresConfig?: boolean;
   configFields?: EffectConfigField[];
+  configPresets?: EffectConfigPreset[];
+  hasPreview?: boolean;
   isUtility: boolean;
   availableFiles?: string[];
 }
@@ -89,6 +178,7 @@ export interface EffectMeta {
 export interface EffectsResponse {
   effects: EffectMeta[];
   fonts: string[];
+  fontCatalog?: FontMeta[];
 }
 
 export interface UploadedImageMeta {

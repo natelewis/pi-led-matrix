@@ -46,8 +46,19 @@ class EffectDiscoveryTestCase(unittest.TestCase):
         self.assertTrue(video["requiresConfig"])
         self.assertEqual([f["key"] for f in video.get("configFields", [])], ["speed"])
 
-        # Marquee & image require config, plain animations do not
-        self.assertTrue(effects["marquee"]["requiresConfig"])
+        # Marquee now uses universal declarative fields + presets + live preview!
+        marquee = effects["marquee"]
+        self.assertEqual(marquee["configSchema"], "fields")
+        self.assertFalse(marquee["requiresConfig"])
+        self.assertTrue(marquee["hasPreview"])
+        self.assertGreaterEqual(len(marquee.get("configPresets", [])), 5)
+        marquee_field_types = {f["key"]: f["type"] for f in marquee.get("configFields", [])}
+        self.assertEqual(marquee_field_types["text"], "textarea")
+        self.assertEqual(marquee_field_types["font"], "font")
+        self.assertEqual(marquee_field_types["align"], "alignment")
+        self.assertEqual(marquee_field_types["lines"], "list")
+
+        # Image still requires config, plain animations do not
         self.assertTrue(effects["image"]["requiresConfig"])
         self.assertEqual(effects["warp"]["configSchema"], "none")
         self.assertFalse(effects["warp"]["requiresConfig"])

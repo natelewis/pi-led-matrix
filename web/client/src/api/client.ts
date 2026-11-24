@@ -1,7 +1,9 @@
 import type {
   AuthStatus,
   ConfigResponse,
+  EffectPreviewResponse,
   EffectsResponse,
+  FontMeta,
   GitPullResponse,
   GitStatusResponse,
   ImageFilesResponse,
@@ -130,6 +132,22 @@ export const api = {
       }),
   },
 
+  fonts: {
+    list: () => request<{ fonts: FontMeta[] }>('/api/fonts'),
+    fileUrl: (file: string) =>
+      `/api/fonts/file?file=${encodeURIComponent(file)}&_target=${encodeURIComponent(activeTargetHeaderId)}`,
+    upload: (filename: string, dataBase64: string) =>
+      request<{ font: FontMeta; fonts: FontMeta[] }>('/api/fonts/upload', {
+        method: 'POST',
+        body: JSON.stringify({ filename, dataBase64 }),
+      }),
+    deleteFile: (file: string) =>
+      request<{ deleted: string; fonts: FontMeta[] }>(
+        `/api/fonts/file?file=${encodeURIComponent(file)}`,
+        { method: 'DELETE' }
+      ),
+  },
+
   config: {
     get: () => request<ConfigResponse>('/api/config'),
     save: (config: MatrixConfig) =>
@@ -147,6 +165,19 @@ export const api = {
 
   effects: {
     list: () => request<EffectsResponse>('/api/effects'),
+    preview: (
+      effectId: string,
+      payload: { config: Record<string, unknown>; width?: number; height?: number },
+      signal?: AbortSignal
+    ) =>
+      request<EffectPreviewResponse>(
+        `/api/effects/${encodeURIComponent(effectId)}/preview`,
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+          signal,
+        }
+      ),
     image: {
       listFiles: () => request<ImageFilesResponse>('/api/effects/image/files'),
       upload: (payload: {

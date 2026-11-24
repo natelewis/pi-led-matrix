@@ -27,6 +27,30 @@ def is_safe_relative_media_path(raw_file: Any) -> bool:
     return ".." not in Path(cleaned).parts
 
 
+def _has_unsafe_font_refs(cfg: Dict[str, Any]) -> bool:
+    def _bad(val: Any) -> bool:
+        if val is None or val == "":
+            return False
+        if not isinstance(val, str):
+            return True
+        cleaned = val.strip()
+        if cleaned == "pixel_5x7":
+            return False
+        if cleaned.startswith("/") or "\\" in cleaned or ".." in Path(cleaned).parts:
+            return True
+        return False
+
+    if "font" in cfg and _bad(cfg.get("font")):
+        return True
+    for list_key in ("lines", "messages"):
+        entries = cfg.get(list_key)
+        if isinstance(entries, list):
+            for entry in entries:
+                if isinstance(entry, dict) and "font" in entry and _bad(entry.get("font")):
+                    return True
+    return False
+
+
 class ConfigValidationError(ValueError):
     """Raised when a submitted matrix configuration fails validation."""
 
@@ -194,6 +218,11 @@ class ConfigStore:
                                 "Media file path must be a relative path without '..'."
                             )
                             continue
+                    elif _has_unsafe_font_refs(cleaned_item["config"]):
+                        errors[f"playlist.{idx}"] = (
+                            "Font reference must be a valid font name without path traversal."
+                        )
+                        continue
                 cleaned_playlist.append(cleaned_item)
             normalized["playlist"] = cleaned_playlist
 

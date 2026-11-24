@@ -36,14 +36,20 @@ function formatConfiguredFieldsSummary(
   for (const field of fields) {
     if (!(field.key in config)) continue;
     const raw = config[field.key];
-    if (field.type === 'select') {
+    if (field.type === 'list' || field.type === 'textarea') {
+      continue;
+    } else if (field.type === 'select') {
       const match = field.options?.find((opt) => opt.value === String(raw));
       parts.push({ key: field.key, text: `${field.label}: ${match?.label ?? String(raw)}` });
     } else if (field.type === 'boolean') {
       parts.push({ key: field.key, text: `${field.label}: ${raw ? 'On' : 'Off'}` });
-    } else if (field.type === 'number' && typeof raw === 'number') {
-      const formatted = field.integer ? String(Math.round(raw)) : String(Number(raw.toFixed(2)));
-      parts.push({ key: field.key, text: `${field.label}: ${formatted}${field.unit ?? ''}` });
+    } else if (field.type === 'number') {
+      if (raw === 'auto') {
+        parts.push({ key: field.key, text: `${field.label}: Auto` });
+      } else if (typeof raw === 'number') {
+        const formatted = field.integer ? String(Math.round(raw)) : String(Number(raw.toFixed(2)));
+        parts.push({ key: field.key, text: `${field.label}: ${formatted}${field.unit ?? ''}` });
+      }
     } else if (field.type === 'color' && typeof raw === 'string' && raw.trim() !== '') {
       const hex = normalizeHexColor(raw);
       parts.push({ key: field.key, text: `${field.label}: ${hex}`, colorSwatch: hex });
@@ -126,9 +132,11 @@ export function PlaylistItemRow({
       : null;
   const hasCustomTitle = Boolean(configuredFile || marqueeText);
   const marqueeLayerCount =
-    marqueeText && Array.isArray(item.config?.messages)
-      ? item.config.messages.length
-      : 0;
+    marqueeText && Array.isArray(item.config?.lines)
+      ? item.config.lines.length
+      : marqueeText && Array.isArray(item.config?.messages)
+        ? item.config.messages.length
+        : 0;
 
   const handleCopyCommand = () => {
     onCopyCommand(runCommand);
@@ -202,7 +210,11 @@ export function PlaylistItemRow({
                   : ''}
               </span>
             ) : marqueeText ? (
-              `${marqueeLayerCount} ${marqueeLayerCount === 1 ? 'message layer' : 'message layers'}`
+              marqueeLayerCount > 0
+                ? `${marqueeLayerCount} ${marqueeLayerCount === 1 ? 'styled line' : 'styled lines'}`
+                : fieldSummary.length > 0
+                  ? fieldSummary.slice(0, 4).map((p) => p.text).join(' · ')
+                  : meta?.description
             ) : fieldSummary.length > 0 ? (
               <span className="inline-flex max-w-full items-center gap-1.5 overflow-hidden whitespace-nowrap text-cyan-200/80">
                 {fieldSummary.map((part, idx) => (

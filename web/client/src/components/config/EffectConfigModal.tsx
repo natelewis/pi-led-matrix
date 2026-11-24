@@ -4,7 +4,6 @@ import {
   Copy,
   Film,
   Image as ImageIcon,
-  Plus,
   Terminal,
   Trash2,
   Upload,
@@ -17,10 +16,9 @@ import {
   Field,
   Input,
   Modal,
-  NumberInput,
-  Select,
   useToast,
 } from '@/components/ui';
+import { EffectLivePreview } from '@/components/config/EffectLivePreview';
 import { ImageUploadCropper } from '@/components/config/ImageUploadCropper';
 import {
   buildInitialFieldValues,
@@ -30,8 +28,10 @@ import {
 import { VideoUploadCropper } from '@/components/config/VideoUploadCropper';
 import { buildEffectRunCommand, copyToClipboard } from '@/utils/cliCommand';
 import type {
+  EffectConfigPreset,
+  EffectFieldValue,
   EffectMeta,
-  MarqueeMessage,
+  FontMeta,
   PlaylistItem,
   UploadedImageMeta,
   UploadedVideoMeta,
@@ -42,24 +42,14 @@ interface EffectConfigModalProps {
   item: PlaylistItem | null;
   effectMeta?: EffectMeta;
   fonts: string[];
+  fontCatalog?: FontMeta[];
   pixelWidth: number;
   pixelHeight: number;
   ledDots: boolean;
   onEffectsChanged?: () => void;
+  onFontsChanged?: (nextFonts: FontMeta[]) => void;
   onClose: () => void;
   onSave: (config?: Record<string, unknown>) => void;
-}
-
-function defaultMarqueeMessage(defaultFont: string): MarqueeMessage {
-  return {
-    left: 0,
-    right: 5,
-    r: 0,
-    g: 220,
-    b: 255,
-    message: 'Hello LED Matrix',
-    font: defaultFont || 'dosis.ttf',
-  };
 }
 
 function rgbToHex(r: number, g: number, b: number): string {
@@ -72,13 +62,43 @@ function rgbToHex(r: number, g: number, b: number): string {
   );
 }
 
-function hexToRgb(hex: string): { r: number; g: number; b: number } {
-  const clean = hex.replace('#', '');
-  return {
-    r: parseInt(clean.slice(0, 2), 16) || 0,
-    g: parseInt(clean.slice(2, 4), 16) || 0,
-    b: parseInt(clean.slice(4, 6), 16) || 0,
-  };
+/**
+ * Seamlessly migrates legacy `{ messages: [...] }` marquee configs into the
+ * declarative `content_mode: 'layers'` form shape when opened in the editor.
+ */
+function normalizeExistingConfig(
+  effectId: string,
+  raw: Record<string, unknown>,
+  defaultFont: string
+): Record<string, unknown> {
+  if (
+    effectId === 'marquee' &&
+    Array.isArray(raw.messages) &&
+    raw.messages.length > 0 &&
+    !('content_mode' in raw) &&
+    !('text' in raw) &&
+    !('lines' in raw)
+  ) {
+    const rest = { ...raw };
+    delete rest.messages;
+    const lines = (raw.messages as Record<string, unknown>[]).map((m) => ({
+      text: String(m.message ?? ''),
+      font: String(m.font ?? defaultFont),
+      size: m.font_size !== undefined ? Number(m.font_size) : 'auto',
+      color: rgbToHex(Number(m.r ?? 255), Number(m.g ?? 255), Number(m.b ?? 255)),
+      color_mode: 'solid',
+      color2: '#ff4081',
+      align: 'center',
+      motion: 'scroll_left',
+    }));
+    return {
+      ...rest,
+      content_mode: 'layers',
+      mode: 'scroll_left',
+      lines,
+    };
+  }
+  return raw;
 }
 
 export function EffectConfigModal({
@@ -86,10 +106,12 @@ export function EffectConfigModal({
   item,
   effectMeta,
   fonts,
+  fontCatalog = [],
   pixelWidth,
   pixelHeight,
   ledDots,
   onEffectsChanged,
+  onFontsChanged,
   onClose,
   onSave,
 }: EffectConfigModalProps) {
@@ -99,13 +121,16 @@ export function EffectConfigModal({
     () => effectMeta?.configFields ?? [],
     [effectMeta]
   );
+  const configPresets = useMemo(
+    () => effectMeta?.configPresets ?? [],
+    [effectMeta]
+  );
+  const hasPreview = Boolean(effectMeta?.hasPreview);
   const defaultFont = fonts[0] ?? 'dosis.ttf';
 
-  const [messages, setMessages] = useState<MarqueeMessage[]>([]);
+  const [localFontCatalog, setLocalFontCatalog] = useState<FontMeta[]>(fontCatalog);
   const [fileName, setFileName] = useState('');
-  const [fieldValues, setFieldValues] = useState<
-    Record<string, string | number | boolean>
-  >({});
+  const [fieldValues, setFieldValues] = useState<Record<string, EffectFieldValue>>({});
   const [extraConfig, setExtraConfig] = useState<Record<string, unknown>>({});
   const [rawJson, setRawJson] = useState('{}');
   const [jsonError, setJsonError] = useState<string | null>(null);
@@ -128,41 +153,79 @@ export function EffectConfigModal({
     name: string;
   } | null>(null);
 
-  const previewCommand = useMemo(() => {
-    if (!item) return '';
-    let cfg: Record<string, unknown> | undefined;
+  useEffect(() => {
+    setLocalFontCatalog(fontCatalog);
+  }, [fontCatalog]);
+
+  // If modal opens for an effect with font fields and catalog is empty, fetch it
+  useEffect(() => {
+    if (!open || localFontCatalog.length > 0) return;
+    const usesFonts = configFields.some(
+      (f) =>
+        f.type === 'font' ||
+        (f.type === 'list' && f.itemFields?.some((sf) => sf.type === 'font'))
+    );
+    if (!usesFonts) return;
+    let cancelled = false;
+    api.fonts
+      .list()
+      .then((res) => {
+        if (!cancelled) {
+          setLocalFontCatalog(res.fonts);
+          onFontsChanged?.(res.fonts);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [open, configFields, localFontCatalog.length, onFontsChanged]);
+
+  const liveConfigObject = useMemo<Record<string, unknown>>(() => {
+    if (!item) return {};
     if (useRawMode || schema === 'none') {
       try {
         const parsed = JSON.parse(rawJson.trim() || '{}');
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-          cfg = parsed as Record<string, unknown>;
+          return parsed as Record<string, unknown>;
         }
       } catch {
-        cfg = item.config;
+        return item.config ?? {};
       }
-    } else if (schema === 'marquee') {
-      cfg = { messages };
-    } else if (schema === 'image') {
-      cfg = fileName.trim() ? { file: fileName.trim() } : undefined;
-    } else if (schema === 'video') {
+      return {};
+    }
+    if (schema === 'image') {
+      return fileName.trim() ? { ...extraConfig, file: fileName.trim() } : {};
+    }
+    if (schema === 'video') {
       const merged = serializeFieldValues(configFields, fieldValues, extraConfig);
       if (fileName.trim()) {
         merged.file = fileName.trim();
       } else {
         delete merged.file;
       }
-      cfg = Object.keys(merged).length > 0 ? merged : undefined;
-    } else if (schema === 'fields') {
-      const serialized = serializeFieldValues(configFields, fieldValues, extraConfig);
-      cfg = Object.keys(serialized).length > 0 ? serialized : undefined;
+      return merged;
     }
+    if (schema === 'fields') {
+      return serializeFieldValues(configFields, fieldValues, extraConfig);
+    }
+    return {};
+  }, [item, useRawMode, schema, rawJson, fileName, configFields, fieldValues, extraConfig]);
+
+  const previewCommand = useMemo(() => {
+    if (!item) return '';
+    const cfg = Object.keys(liveConfigObject).length > 0 ? liveConfigObject : undefined;
     return buildEffectRunCommand({ effect: item.effect, config: cfg });
-  }, [item, useRawMode, schema, rawJson, messages, fileName, configFields, fieldValues, extraConfig]);
+  }, [item, liveConfigObject]);
 
   useEffect(() => {
     if (!open || !item) return;
     setJsonError(null);
-    const existing = item.config ?? {};
+    const existing = normalizeExistingConfig(
+      item.effect,
+      item.config ?? {},
+      defaultFont
+    );
     setExtraConfig(existing);
 
     if (configFields.length > 0) {
@@ -171,25 +234,7 @@ export function EffectConfigModal({
       setFieldValues({});
     }
 
-    if (schema === 'marquee') {
-      const existingMsgs = Array.isArray(existing.messages)
-        ? (existing.messages as MarqueeMessage[])
-        : [];
-      setMessages(
-        existingMsgs.length > 0
-          ? existingMsgs.map((m) => ({
-              left: Number(m.left ?? 0),
-              right: Number(m.right ?? 5),
-              r: Number(m.r ?? 255),
-              g: Number(m.g ?? 255),
-              b: Number(m.b ?? 255),
-              message: String(m.message ?? ''),
-              font: String(m.font ?? defaultFont),
-            }))
-          : [defaultMarqueeMessage(defaultFont)]
-      );
-      setUseRawMode(false);
-    } else if (schema === 'image' || schema === 'video') {
+    if (schema === 'image' || schema === 'video') {
       setFileName(typeof existing.file === 'string' ? existing.file : '');
       setUseRawMode(false);
     } else if (schema === 'fields' && configFields.length > 0) {
@@ -198,7 +243,7 @@ export function EffectConfigModal({
       setUseRawMode(true);
     }
 
-    setRawJson(JSON.stringify(existing, null, 2));
+    setRawJson(JSON.stringify(item.config ?? {}, null, 2));
   }, [open, item, schema, configFields, defaultFont]);
 
   useEffect(() => {
@@ -247,6 +292,29 @@ export function EffectConfigModal({
 
   if (!item) return null;
 
+  const handleApplyPreset = (preset: EffectConfigPreset) => {
+    const nextValues = buildInitialFieldValues(configFields, preset.config);
+    setFieldValues(nextValues);
+    setExtraConfig({});
+    setJsonError(null);
+    notify('info', `Applied "${preset.label}" preset`);
+  };
+
+  const handleApplyDiagnosticPatch = (patch: Record<string, unknown>) => {
+    const merged = { ...liveConfigObject, ...patch };
+    setFieldValues(buildInitialFieldValues(configFields, merged));
+    if (useRawMode) {
+      setRawJson(JSON.stringify(merged, null, 2));
+    }
+    setJsonError(null);
+  };
+
+  const handleFontsUpdated = (nextFonts: FontMeta[]) => {
+    setLocalFontCatalog(nextFonts);
+    onFontsChanged?.(nextFonts);
+    onEffectsChanged?.();
+  };
+
   const handleSave = () => {
     if (useRawMode || schema === 'none') {
       const trimmed = rawJson.trim();
@@ -266,17 +334,6 @@ export function EffectConfigModal({
       } catch {
         setJsonError('Invalid JSON syntax.');
       }
-      return;
-    }
-
-    if (schema === 'marquee') {
-      const filtered = messages.filter((m) => m.message.trim().length > 0);
-      if (filtered.length === 0) {
-        setJsonError('Add at least one marquee message.');
-        return;
-      }
-      onSave({ ...extraConfig, messages: filtered });
-      onClose();
       return;
     }
 
@@ -313,6 +370,8 @@ export function EffectConfigModal({
     }
   };
 
+  const showTwoColumnPreview = hasPreview && schema === 'fields' && !useRawMode;
+
   return (
     <>
       <Modal
@@ -321,645 +380,524 @@ export function EffectConfigModal({
           setConfirmDelete(null);
           onClose();
         }}
-      title={`Configure ${effectMeta?.label ?? item.effect}`}
-      description={
-        schema === 'none'
-          ? 'Optional JSON config passed to this effect when it runs.'
-          : effectMeta?.description
-      }
-      size="lg"
-      footer={
-        <>
-          {schema !== 'none' && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="mr-auto"
-              onClick={() => {
-                if (!useRawMode) {
-                  let previewObj: Record<string, unknown>;
-                  if (schema === 'marquee') {
-                    previewObj = { ...extraConfig, messages };
-                  } else if (schema === 'fields') {
-                    previewObj = serializeFieldValues(
-                      configFields,
-                      fieldValues,
-                      extraConfig
-                    );
-                  } else if (schema === 'video' && configFields.length > 0) {
-                    previewObj = {
-                      ...serializeFieldValues(configFields, fieldValues, extraConfig),
-                      file: fileName,
-                    };
+        title={`Configure ${effectMeta?.label ?? item.effect}`}
+        description={
+          schema === 'none'
+            ? 'Optional JSON config passed to this effect when it runs.'
+            : effectMeta?.description
+        }
+        size={showTwoColumnPreview ? 'xl' : 'lg'}
+        footer={
+          <>
+            {schema !== 'none' && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mr-auto"
+                onClick={() => {
+                  if (!useRawMode) {
+                    setRawJson(JSON.stringify(liveConfigObject, null, 2));
+                    setUseRawMode(true);
+                    setJsonError(null);
                   } else {
-                    previewObj = { ...extraConfig, file: fileName };
-                  }
-                  setRawJson(JSON.stringify(previewObj, null, 2));
-                  setUseRawMode(true);
-                  setJsonError(null);
-                } else {
-                  try {
-                    const parsed = JSON.parse(rawJson.trim() || '{}');
-                    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-                      setJsonError('Fix invalid JSON object before switching back to Form Editor.');
-                      return;
-                    }
-                    const parsedObj = parsed as Record<string, unknown>;
-                    setExtraConfig(parsedObj);
-                    if (schema === 'marquee' && Array.isArray(parsedObj.messages)) {
-                      setMessages(
-                        parsedObj.messages.map((m: Record<string, unknown>) => ({
-                          left: Number(m.left ?? 0),
-                          right: Number(m.right ?? 5),
-                          r: Number(m.r ?? 255),
-                          g: Number(m.g ?? 255),
-                          b: Number(m.b ?? 255),
-                          message: String(m.message ?? ''),
-                          font: String(m.font ?? defaultFont),
-                        }))
-                      );
-                    } else if (schema === 'image' || schema === 'video') {
-                      if (typeof parsedObj.file === 'string') {
-                        setFileName(parsedObj.file);
+                    try {
+                      const parsed = JSON.parse(rawJson.trim() || '{}');
+                      if (
+                        typeof parsed !== 'object' ||
+                        parsed === null ||
+                        Array.isArray(parsed)
+                      ) {
+                        setJsonError(
+                          'Fix invalid JSON object before switching back to Form Editor.'
+                        );
+                        return;
                       }
-                      if (schema === 'video' && configFields.length > 0) {
+                      const parsedObj = normalizeExistingConfig(
+                        item.effect,
+                        parsed as Record<string, unknown>,
+                        defaultFont
+                      );
+                      setExtraConfig(parsedObj);
+                      if (schema === 'image' || schema === 'video') {
+                        if (typeof parsedObj.file === 'string') {
+                          setFileName(parsedObj.file);
+                        }
+                        if (schema === 'video' && configFields.length > 0) {
+                          setFieldValues(buildInitialFieldValues(configFields, parsedObj));
+                        }
+                      } else if (schema === 'fields') {
                         setFieldValues(buildInitialFieldValues(configFields, parsedObj));
                       }
-                    } else if (schema === 'fields') {
-                      setFieldValues(buildInitialFieldValues(configFields, parsedObj));
-                    }
-                    setUseRawMode(false);
-                    setJsonError(null);
-                  } catch {
-                    setJsonError('Fix invalid JSON syntax before switching back to Form Editor.');
-                  }
-                }
-              }}
-            >
-              {useRawMode ? 'Switch to Form Editor' : 'Edit Raw JSON'}
-            </Button>
-          )}
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="primary" onClick={handleSave}>
-            Apply Effect Config
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-4">
-        {!useRawMode && schema === 'marquee' && (
-          <div className="space-y-3">
-            {messages.map((msg, idx) => (
-              <div
-                key={idx}
-                className="space-y-3 rounded-xl border border-slate-800 bg-surface-950/70 p-4"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                    Message #{idx + 1}
-                  </span>
-                  {messages.length > 1 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        setMessages((prev) => prev.filter((_, i) => i !== idx))
-                      }
-                      leftIcon={<Trash2 className="h-3.5 w-3.5 text-rose-400" />}
-                    >
-                      Remove
-                    </Button>
-                  )}
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Text">
-                    <Input
-                      value={msg.message}
-                      placeholder="Scrolling message..."
-                      onChange={(e) =>
-                        setMessages((prev) =>
-                          prev.map((m, i) =>
-                            i === idx ? { ...m, message: e.target.value } : m
-                          )
-                        )
-                      }
-                    />
-                  </Field>
-
-                  <Field label="Font">
-                    {fonts.length > 0 ? (
-                      <Select
-                        value={msg.font}
-                        options={
-                          msg.font && !fonts.includes(msg.font)
-                            ? [
-                                { value: msg.font, label: `${msg.font} (missing)` },
-                                ...fonts.map((f) => ({ value: f, label: f })),
-                              ]
-                            : fonts.map((f) => ({ value: f, label: f }))
-                        }
-                        onChange={(e) =>
-                          setMessages((prev) =>
-                            prev.map((m, i) =>
-                              i === idx ? { ...m, font: e.target.value } : m
-                            )
-                          )
-                        }
-                      />
-                    ) : (
-                      <Input
-                        value={msg.font}
-                        onChange={(e) =>
-                          setMessages((prev) =>
-                            prev.map((m, i) =>
-                              i === idx ? { ...m, font: e.target.value } : m
-                            )
-                          )
-                        }
-                      />
-                    )}
-                  </Field>
-                </div>
-
-                <div className="grid grid-cols-3 gap-3">
-                  <Field label="X Offset (left)">
-                    <NumberInput
-                      integer
-                      value={msg.left}
-                      onChange={(val) =>
-                        setMessages((prev) =>
-                          prev.map((m, i) => (i === idx ? { ...m, left: val } : m))
-                        )
-                      }
-                    />
-                  </Field>
-                  <Field label="Y Offset (right)">
-                    <NumberInput
-                      integer
-                      value={msg.right}
-                      onChange={(val) =>
-                        setMessages((prev) =>
-                          prev.map((m, i) => (i === idx ? { ...m, right: val } : m))
-                        )
-                      }
-                    />
-                  </Field>
-                  <Field label="Color">
-                    <div className="flex h-9 items-center gap-2 rounded-lg border border-slate-700/90 bg-surface-950/90 px-2.5">
-                      <input
-                        type="color"
-                        value={rgbToHex(msg.r, msg.g, msg.b)}
-                        onChange={(e) => {
-                          const rgb = hexToRgb(e.target.value);
-                          setMessages((prev) =>
-                            prev.map((m, i) => (i === idx ? { ...m, ...rgb } : m))
-                          );
-                        }}
-                        className="h-5 w-7 cursor-pointer rounded border-0 bg-transparent p-0"
-                      />
-                      <span className="font-mono text-xs text-slate-300">
-                        {msg.r},{msg.g},{msg.b}
-                      </span>
-                    </div>
-                  </Field>
-                </div>
-              </div>
-            ))}
-
-            <Button
-              variant="outline"
-              size="sm"
-              leftIcon={<Plus className="h-3.5 w-3.5" />}
-              onClick={() =>
-                setMessages((prev) => [...prev, defaultMarqueeMessage(defaultFont)])
-              }
-            >
-              Add Message Layer
-            </Button>
-          </div>
-        )}
-
-        {!useRawMode && schema === 'image' && (
-          <div className="space-y-4">
-            {/* Switch between saved image library & smart uploader */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="inline-flex rounded-xl border border-slate-800 bg-surface-950 p-1">
-                <button
-                  type="button"
-                  onClick={() => setImageTab('library')}
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
-                    imageTab === 'library'
-                      ? 'bg-cyan-500/20 text-cyan-200 ring-1 ring-cyan-500/40'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <ImageIcon className="h-3.5 w-3.5" />
-                  Saved Images ({imageFiles.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setImageTab('upload')}
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
-                    imageTab === 'upload'
-                      ? 'bg-cyan-500/20 text-cyan-200 ring-1 ring-cyan-500/40'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Upload className="h-3.5 w-3.5" />
-                  Upload & Smart Crop
-                </button>
-              </div>
-              <Badge tone="neutral" className="font-mono">
-                Target: {pixelWidth}×{pixelHeight}
-              </Badge>
-            </div>
-
-            {imageTab === 'upload' ? (
-              <ImageUploadCropper
-                targetWidth={pixelWidth}
-                targetHeight={pixelHeight}
-                ledDots={ledDots}
-                onCancel={imageFiles.length > 0 ? () => setImageTab('library') : undefined}
-                onUploaded={(uploaded, allFiles) => {
-                  setImageFiles(allFiles);
-                  setFileName(uploaded.file);
-                  setJsonError(null);
-                  setImageTab('library');
-                  onEffectsChanged?.();
-                }}
-              />
-            ) : (
-              <div className="space-y-3">
-                {loadingImages ? (
-                  <p className="py-6 text-center text-xs text-slate-400">
-                    Loading image library...
-                  </p>
-                ) : imageFiles.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-slate-800 bg-surface-950/60 p-6 text-center">
-                    <p className="text-xs text-slate-400">
-                      No images found in <code>src/effects/image/</code> or{' '}
-                      <code>_uploads/</code> yet.
-                    </p>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      className="mt-3"
-                      onClick={() => setImageTab('upload')}
-                      leftIcon={<Upload className="h-3.5 w-3.5" />}
-                    >
-                      Upload an Image
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="grid max-h-[260px] grid-cols-2 gap-2.5 overflow-y-auto pr-1 sm:grid-cols-3">
-                    {imageFiles.map((img) => {
-                      const selected = fileName === img.file;
-                      const sizeMatches =
-                        img.width === pixelWidth && img.height === pixelHeight;
-                      return (
-                        <div
-                          key={img.file}
-                          onClick={() => {
-                            setFileName(img.file);
-                            setJsonError(null);
-                          }}
-                          className={`group relative cursor-pointer overflow-hidden rounded-xl border transition-all ${
-                            selected
-                              ? 'border-cyan-400 bg-cyan-500/10 ring-1 ring-cyan-400/40'
-                              : 'border-slate-800 bg-surface-950/80 hover:border-slate-600'
-                          }`}
-                        >
-                          <div className="flex h-24 items-center justify-center bg-black p-1.5">
-                            <img
-                              src={api.effects.image.previewUrl(img.file)}
-                              alt={img.name}
-                              className="max-h-full max-w-full object-contain"
-                              style={{ imageRendering: 'pixelated' }}
-                            />
-                          </div>
-                          <div className="space-y-1 p-2">
-                            <div className="truncate font-mono text-[11px] text-slate-200">
-                              {img.name}
-                            </div>
-                            <div className="flex items-center justify-between gap-1">
-                              {img.width && img.height ? (
-                                <Badge
-                                  tone={sizeMatches ? 'emerald' : 'amber'}
-                                  className="font-mono text-[10px]"
-                                >
-                                  {img.width}×{img.height}
-                                </Badge>
-                              ) : (
-                                <Badge tone="neutral" className="text-[10px]">
-                                  image
-                                </Badge>
-                              )}
-                              <button
-                                type="button"
-                                disabled={deletingFile === img.file}
-                                title={`Delete ${img.name}`}
-                                aria-label={`Delete ${img.name}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setConfirmDelete({
-                                    kind: 'image',
-                                    file: img.file,
-                                    name: img.name,
-                                  });
-                                }}
-                                className="rounded p-1 text-slate-400 transition-colors hover:bg-rose-500/15 hover:text-rose-300 cursor-pointer"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                <Field
-                  label="Selected File Path"
-                  description="Relative to src/effects/image/ (uploaded images live in _uploads/)."
-                >
-                  <Input
-                    value={fileName}
-                    placeholder="_uploads/my_photo_128x72.png"
-                    onChange={(e) => {
-                      setFileName(e.target.value);
+                      setUseRawMode(false);
                       setJsonError(null);
-                    }}
-                  />
-                </Field>
-              </div>
-            )}
-          </div>
-        )}
-
-        {!useRawMode && schema === 'video' && (
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="inline-flex rounded-xl border border-slate-800 bg-surface-950 p-1">
-                <button
-                  type="button"
-                  onClick={() => setVideoTab('library')}
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
-                    videoTab === 'library'
-                      ? 'bg-cyan-500/20 text-cyan-200 ring-1 ring-cyan-500/40'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Film className="h-3.5 w-3.5" />
-                  Saved Videos ({videoFiles.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setVideoTab('upload')}
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
-                    videoTab === 'upload'
-                      ? 'bg-cyan-500/20 text-cyan-200 ring-1 ring-cyan-500/40'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <Upload className="h-3.5 w-3.5" />
-                  Upload & Smart Crop
-                </button>
-              </div>
-              <Badge tone="neutral" className="font-mono">
-                Target: {pixelWidth}×{pixelHeight}
-              </Badge>
-            </div>
-
-            {videoTab === 'upload' ? (
-              <VideoUploadCropper
-                targetWidth={pixelWidth}
-                targetHeight={pixelHeight}
-                ledDots={ledDots}
-                onCancel={videoFiles.length > 0 ? () => setVideoTab('library') : undefined}
-                onUploaded={(uploaded, allFiles) => {
-                  setVideoFiles(allFiles);
-                  setFileName(uploaded.file);
-                  setJsonError(null);
-                  setVideoTab('library');
-                  onEffectsChanged?.();
+                    } catch {
+                      setJsonError(
+                        'Fix invalid JSON syntax before switching back to Form Editor.'
+                      );
+                    }
+                  }
                 }}
-              />
-            ) : (
-              <div className="space-y-3">
-                {loadingVideos ? (
-                  <p className="py-6 text-center text-xs text-slate-400">
-                    Loading video library...
-                  </p>
-                ) : videoFiles.length === 0 ? (
-                  <div className="rounded-xl border border-dashed border-slate-800 bg-surface-950/60 p-6 text-center">
-                    <p className="text-xs text-slate-400">
-                      No videos found in <code>src/effects/video/</code> or{' '}
-                      <code>_uploads/</code> yet.
+              >
+                {useRawMode ? 'Switch to Form Editor' : 'Edit Raw JSON'}
+              </Button>
+            )}
+            <Button variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleSave}>
+              Apply Effect Config
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          {!useRawMode && schema === 'image' && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="inline-flex rounded-xl border border-slate-800 bg-surface-950 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setImageTab('library')}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                      imageTab === 'library'
+                        ? 'bg-cyan-500/20 text-cyan-200 ring-1 ring-cyan-500/40'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <ImageIcon className="h-3.5 w-3.5" />
+                    Saved Images ({imageFiles.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImageTab('upload')}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                      imageTab === 'upload'
+                        ? 'bg-cyan-500/20 text-cyan-200 ring-1 ring-cyan-500/40'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    Upload & Smart Crop
+                  </button>
+                </div>
+                <Badge tone="neutral" className="font-mono">
+                  Target: {pixelWidth}×{pixelHeight}
+                </Badge>
+              </div>
+
+              {imageTab === 'upload' ? (
+                <ImageUploadCropper
+                  targetWidth={pixelWidth}
+                  targetHeight={pixelHeight}
+                  ledDots={ledDots}
+                  onCancel={imageFiles.length > 0 ? () => setImageTab('library') : undefined}
+                  onUploaded={(uploaded, allFiles) => {
+                    setImageFiles(allFiles);
+                    setFileName(uploaded.file);
+                    setJsonError(null);
+                    setImageTab('library');
+                    onEffectsChanged?.();
+                  }}
+                />
+              ) : (
+                <div className="space-y-3">
+                  {loadingImages ? (
+                    <p className="py-6 text-center text-xs text-slate-400">
+                      Loading image library...
                     </p>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      className="mt-3"
-                      onClick={() => setVideoTab('upload')}
-                      leftIcon={<Upload className="h-3.5 w-3.5" />}
-                    >
-                      Upload a Video
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="grid max-h-[260px] grid-cols-2 gap-2.5 overflow-y-auto pr-1 sm:grid-cols-3">
-                    {videoFiles.map((vid) => {
-                      const selected = fileName === vid.file;
-                      const sizeMatches =
-                        vid.width === pixelWidth && vid.height === pixelHeight;
-                      return (
-                        <div
-                          key={vid.file}
-                          onClick={() => {
-                            setFileName(vid.file);
-                            setJsonError(null);
-                          }}
-                          className={`group relative cursor-pointer overflow-hidden rounded-xl border transition-all ${
-                            selected
-                              ? 'border-cyan-400 bg-cyan-500/10 ring-1 ring-cyan-400/40'
-                              : 'border-slate-800 bg-surface-950/80 hover:border-slate-600'
-                          }`}
-                        >
-                          <div className="flex h-24 items-center justify-center bg-black p-1.5">
-                            <video
-                              src={api.effects.video.previewUrl(vid.file)}
-                              muted
-                              loop
-                              playsInline
-                              preload="metadata"
-                              onMouseEnter={(e) => {
-                                void e.currentTarget.play().catch(() => {});
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.pause();
-                              }}
-                              className="max-h-full max-w-full object-contain"
-                              style={{ imageRendering: 'pixelated' }}
-                            />
-                          </div>
-                          <div className="space-y-1 p-2">
-                            <div className="truncate font-mono text-[11px] text-slate-200">
-                              {vid.name}
+                  ) : imageFiles.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-slate-800 bg-surface-950/60 p-6 text-center">
+                      <p className="text-xs text-slate-400">
+                        No images found in <code>src/effects/image/</code> or{' '}
+                        <code>_uploads/</code> yet.
+                      </p>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        className="mt-3"
+                        onClick={() => setImageTab('upload')}
+                        leftIcon={<Upload className="h-3.5 w-3.5" />}
+                      >
+                        Upload an Image
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="grid max-h-[260px] grid-cols-2 gap-2.5 overflow-y-auto pr-1 sm:grid-cols-3">
+                      {imageFiles.map((img) => {
+                        const selected = fileName === img.file;
+                        const sizeMatches =
+                          img.width === pixelWidth && img.height === pixelHeight;
+                        return (
+                          <div
+                            key={img.file}
+                            onClick={() => {
+                              setFileName(img.file);
+                              setJsonError(null);
+                            }}
+                            className={`group relative cursor-pointer overflow-hidden rounded-xl border transition-all ${
+                              selected
+                                ? 'border-cyan-400 bg-cyan-500/10 ring-1 ring-cyan-400/40'
+                                : 'border-slate-800 bg-surface-950/80 hover:border-slate-600'
+                            }`}
+                          >
+                            <div className="flex h-24 items-center justify-center bg-black p-1.5">
+                              <img
+                                src={api.effects.image.previewUrl(img.file)}
+                                alt={img.name}
+                                className="max-h-full max-w-full object-contain"
+                                style={{ imageRendering: 'pixelated' }}
+                              />
                             </div>
-                            <div className="flex items-center justify-between gap-1">
-                              <div className="flex items-center gap-1">
-                                {vid.width && vid.height ? (
+                            <div className="space-y-1 p-2">
+                              <div className="truncate font-mono text-[11px] text-slate-200">
+                                {img.name}
+                              </div>
+                              <div className="flex items-center justify-between gap-1">
+                                {img.width && img.height ? (
                                   <Badge
                                     tone={sizeMatches ? 'emerald' : 'amber'}
                                     className="font-mono text-[10px]"
                                   >
-                                    {vid.width}×{vid.height}
+                                    {img.width}×{img.height}
                                   </Badge>
                                 ) : (
                                   <Badge tone="neutral" className="text-[10px]">
-                                    video
+                                    image
                                   </Badge>
                                 )}
-                                {vid.duration !== null && (
-                                  <span className="font-mono text-[10px] text-slate-400">
-                                    {vid.duration.toFixed(1)}s
-                                  </span>
-                                )}
+                                <button
+                                  type="button"
+                                  disabled={deletingFile === img.file}
+                                  title={`Delete ${img.name}`}
+                                  aria-label={`Delete ${img.name}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setConfirmDelete({
+                                      kind: 'image',
+                                      file: img.file,
+                                      name: img.name,
+                                    });
+                                  }}
+                                  className="rounded p-1 text-slate-400 transition-colors hover:bg-rose-500/15 hover:text-rose-300 cursor-pointer"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
                               </div>
-                              <button
-                                type="button"
-                                disabled={deletingFile === vid.file}
-                                title={`Delete ${vid.name}`}
-                                aria-label={`Delete ${vid.name}`}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setConfirmDelete({
-                                    kind: 'video',
-                                    file: vid.file,
-                                    name: vid.name,
-                                  });
-                                }}
-                                className="rounded p-1 text-slate-400 transition-colors hover:bg-rose-500/15 hover:text-rose-300 cursor-pointer"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
                             </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                        );
+                      })}
+                    </div>
+                  )}
 
-                <Field
-                  label="Selected File Path"
-                  description="Relative to src/effects/video/ (uploaded videos live in _uploads/)."
-                >
-                  <Input
-                    value={fileName}
-                    placeholder="_uploads/my_clip_128x72.mp4"
-                    onChange={(e) => {
-                      setFileName(e.target.value);
-                      setJsonError(null);
-                    }}
-                  />
-                </Field>
+                  <Field
+                    label="Selected File Path"
+                    description="Relative to src/effects/image/ (uploaded images live in _uploads/)."
+                  >
+                    <Input
+                      value={fileName}
+                      placeholder="_uploads/my_photo_128x72.png"
+                      onChange={(e) => {
+                        setFileName(e.target.value);
+                        setJsonError(null);
+                      }}
+                    />
+                  </Field>
+                </div>
+              )}
+            </div>
+          )}
 
-                {configFields.length > 0 && (
-                  <SchemaFieldsEditor
-                    heading="Playback Options"
-                    fields={configFields}
-                    values={fieldValues}
-                    onChange={(key, val) => {
-                      setFieldValues((prev) => ({ ...prev, [key]: val }));
-                      setJsonError(null);
-                    }}
-                    onResetDefaults={() => {
-                      setFieldValues(buildInitialFieldValues(configFields));
-                      setJsonError(null);
-                    }}
-                  />
-                )}
+          {!useRawMode && schema === 'video' && (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="inline-flex rounded-xl border border-slate-800 bg-surface-950 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setVideoTab('library')}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                      videoTab === 'library'
+                        ? 'bg-cyan-500/20 text-cyan-200 ring-1 ring-cyan-500/40'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Film className="h-3.5 w-3.5" />
+                    Saved Videos ({videoFiles.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setVideoTab('upload')}
+                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                      videoTab === 'upload'
+                        ? 'bg-cyan-500/20 text-cyan-200 ring-1 ring-cyan-500/40'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    Upload & Smart Crop
+                  </button>
+                </div>
+                <Badge tone="neutral" className="font-mono">
+                  Target: {pixelWidth}×{pixelHeight}
+                </Badge>
               </div>
-            )}
-          </div>
-        )}
 
-        {!useRawMode && schema === 'fields' && configFields.length > 0 && (
-          <SchemaFieldsEditor
-            fields={configFields}
-            values={fieldValues}
-            onChange={(key, val) => {
-              setFieldValues((prev) => ({ ...prev, [key]: val }));
-              setJsonError(null);
-            }}
-            onResetDefaults={() => {
-              setFieldValues(buildInitialFieldValues(configFields));
-              setJsonError(null);
-            }}
-          />
-        )}
+              {videoTab === 'upload' ? (
+                <VideoUploadCropper
+                  targetWidth={pixelWidth}
+                  targetHeight={pixelHeight}
+                  ledDots={ledDots}
+                  onCancel={videoFiles.length > 0 ? () => setVideoTab('library') : undefined}
+                  onUploaded={(uploaded, allFiles) => {
+                    setVideoFiles(allFiles);
+                    setFileName(uploaded.file);
+                    setJsonError(null);
+                    setVideoTab('library');
+                    onEffectsChanged?.();
+                  }}
+                />
+              ) : (
+                <div className="space-y-3">
+                  {loadingVideos ? (
+                    <p className="py-6 text-center text-xs text-slate-400">
+                      Loading video library...
+                    </p>
+                  ) : videoFiles.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-slate-800 bg-surface-950/60 p-6 text-center">
+                      <p className="text-xs text-slate-400">
+                        No videos found in <code>src/effects/video/</code> or{' '}
+                        <code>_uploads/</code> yet.
+                      </p>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        className="mt-3"
+                        onClick={() => setVideoTab('upload')}
+                        leftIcon={<Upload className="h-3.5 w-3.5" />}
+                      >
+                        Upload a Video
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="grid max-h-[260px] grid-cols-2 gap-2.5 overflow-y-auto pr-1 sm:grid-cols-3">
+                      {videoFiles.map((vid) => {
+                        const selected = fileName === vid.file;
+                        const sizeMatches =
+                          vid.width === pixelWidth && vid.height === pixelHeight;
+                        return (
+                          <div
+                            key={vid.file}
+                            onClick={() => {
+                              setFileName(vid.file);
+                              setJsonError(null);
+                            }}
+                            className={`group relative cursor-pointer overflow-hidden rounded-xl border transition-all ${
+                              selected
+                                ? 'border-cyan-400 bg-cyan-500/10 ring-1 ring-cyan-400/40'
+                                : 'border-slate-800 bg-surface-950/80 hover:border-slate-600'
+                            }`}
+                          >
+                            <div className="flex h-24 items-center justify-center bg-black p-1.5">
+                              <video
+                                src={api.effects.video.previewUrl(vid.file)}
+                                muted
+                                loop
+                                playsInline
+                                preload="metadata"
+                                onMouseEnter={(e) => {
+                                  void e.currentTarget.play().catch(() => {});
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.pause();
+                                }}
+                                className="max-h-full max-w-full object-contain"
+                                style={{ imageRendering: 'pixelated' }}
+                              />
+                            </div>
+                            <div className="space-y-1 p-2">
+                              <div className="truncate font-mono text-[11px] text-slate-200">
+                                {vid.name}
+                              </div>
+                              <div className="flex items-center justify-between gap-1">
+                                <div className="flex items-center gap-1">
+                                  {vid.width && vid.height ? (
+                                    <Badge
+                                      tone={sizeMatches ? 'emerald' : 'amber'}
+                                      className="font-mono text-[10px]"
+                                    >
+                                      {vid.width}×{vid.height}
+                                    </Badge>
+                                  ) : (
+                                    <Badge tone="neutral" className="text-[10px]">
+                                      video
+                                    </Badge>
+                                  )}
+                                  {vid.duration !== null && (
+                                    <span className="font-mono text-[10px] text-slate-400">
+                                      {vid.duration.toFixed(1)}s
+                                    </span>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  disabled={deletingFile === vid.file}
+                                  title={`Delete ${vid.name}`}
+                                  aria-label={`Delete ${vid.name}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setConfirmDelete({
+                                      kind: 'video',
+                                      file: vid.file,
+                                      name: vid.name,
+                                    });
+                                  }}
+                                  className="rounded p-1 text-slate-400 transition-colors hover:bg-rose-500/15 hover:text-rose-300 cursor-pointer"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
 
-        {(useRawMode || schema === 'none') && (
-          <Field
-            label="Effect Config JSON"
-            description="Leave empty or {} for effects that need no extra parameters."
-          >
-            <textarea
-              rows={8}
-              value={rawJson}
-              onChange={(e) => {
-                setRawJson(e.target.value);
-                setJsonError(null);
-              }}
-              spellCheck={false}
-              className="w-full rounded-xl border border-slate-700/90 bg-surface-950 p-3 font-mono text-xs text-slate-100 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400/20"
-            />
-          </Field>
-        )}
+                  <Field
+                    label="Selected File Path"
+                    description="Relative to src/effects/video/ (uploaded videos live in _uploads/)."
+                  >
+                    <Input
+                      value={fileName}
+                      placeholder="_uploads/my_clip_128x72.mp4"
+                      onChange={(e) => {
+                        setFileName(e.target.value);
+                        setJsonError(null);
+                      }}
+                    />
+                  </Field>
 
-        {jsonError && <p className="text-xs text-rose-400">{jsonError}</p>}
+                  {configFields.length > 0 && (
+                    <SchemaFieldsEditor
+                      heading="Playback Options"
+                      fields={configFields}
+                      values={fieldValues}
+                      fontCatalog={localFontCatalog}
+                      pixelHeight={pixelHeight}
+                      onFontsChanged={handleFontsUpdated}
+                      onChange={(key, val) => {
+                        setFieldValues((prev) => ({ ...prev, [key]: val }));
+                        setJsonError(null);
+                      }}
+                      onResetDefaults={() => {
+                        setFieldValues(buildInitialFieldValues(configFields));
+                        setJsonError(null);
+                      }}
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
-        {/* Terminal Command Preview */}
-        <div className="space-y-1.5 rounded-xl border border-slate-800 bg-surface-950/90 p-3">
-          <div className="flex items-center justify-between gap-2">
-            <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-slate-400">
-              <Terminal className="h-3.5 w-3.5 text-cyan-400" />
-              Terminal Command
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={async () => {
-                try {
-                  await copyToClipboard(previewCommand);
-                  setCopiedCmd(true);
-                  notify('success', 'Copied terminal command');
-                  window.setTimeout(() => setCopiedCmd(false), 1800);
-                } catch {
-                  notify('error', 'Copy failed');
-                }
-              }}
-              leftIcon={
-                copiedCmd ? (
-                  <Check className="h-3.5 w-3.5 text-emerald-400" />
-                ) : (
-                  <Copy className="h-3.5 w-3.5" />
-                )
+          {!useRawMode && schema === 'fields' && configFields.length > 0 && (
+            <div
+              className={
+                showTwoColumnPreview
+                  ? 'grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.12fr)] lg:items-start'
+                  : ''
               }
             >
-              {copiedCmd ? 'Copied' : 'Copy'}
-            </Button>
+              {showTwoColumnPreview && (
+                <div className="lg:sticky lg:top-0">
+                  <EffectLivePreview
+                    effectId={item.effect}
+                    config={liveConfigObject}
+                    pixelWidth={pixelWidth}
+                    pixelHeight={pixelHeight}
+                    defaultLedDots={ledDots}
+                    onApplyPatch={handleApplyDiagnosticPatch}
+                  />
+                </div>
+              )}
+
+              <SchemaFieldsEditor
+                fields={configFields}
+                values={fieldValues}
+                presets={configPresets}
+                fontCatalog={localFontCatalog}
+                pixelHeight={pixelHeight}
+                onFontsChanged={handleFontsUpdated}
+                onApplyPreset={handleApplyPreset}
+                onChange={(key, val) => {
+                  setFieldValues((prev) => ({ ...prev, [key]: val }));
+                  setJsonError(null);
+                }}
+                onResetDefaults={() => {
+                  setFieldValues(buildInitialFieldValues(configFields));
+                  setExtraConfig({});
+                  setJsonError(null);
+                }}
+              />
+            </div>
+          )}
+
+          {(useRawMode || schema === 'none') && (
+            <Field
+              label="Effect Config JSON"
+              description="Leave empty or {} for effects that need no extra parameters."
+            >
+              <textarea
+                rows={8}
+                value={rawJson}
+                onChange={(e) => {
+                  setRawJson(e.target.value);
+                  setJsonError(null);
+                }}
+                spellCheck={false}
+                className="w-full rounded-xl border border-slate-700/90 bg-surface-950 p-3 font-mono text-xs text-slate-100 focus:border-cyan-400 focus:outline-none focus:ring-2 focus:ring-cyan-400/20"
+              />
+            </Field>
+          )}
+
+          {jsonError && <p className="text-xs text-rose-400">{jsonError}</p>}
+
+          {/* Terminal Command Preview */}
+          <div className="space-y-1.5 rounded-xl border border-slate-800 bg-surface-950/90 p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wider text-slate-400">
+                <Terminal className="h-3.5 w-3.5 text-cyan-400" />
+                Terminal Command
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    await copyToClipboard(previewCommand);
+                    setCopiedCmd(true);
+                    notify('success', 'Copied terminal command');
+                    window.setTimeout(() => setCopiedCmd(false), 1800);
+                  } catch {
+                    notify('error', 'Copy failed');
+                  }
+                }}
+                leftIcon={
+                  copiedCmd ? (
+                    <Check className="h-3.5 w-3.5 text-emerald-400" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5" />
+                  )
+                }
+              >
+                {copiedCmd ? 'Copied' : 'Copy'}
+              </Button>
+            </div>
+            <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-black/50 px-2.5 py-2 font-mono text-[11px] text-cyan-200">
+              {previewCommand}
+            </pre>
           </div>
-          <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-black/50 px-2.5 py-2 font-mono text-[11px] text-cyan-200">
-            {previewCommand}
-          </pre>
         </div>
-      </div>
       </Modal>
 
       <ConfirmDialog

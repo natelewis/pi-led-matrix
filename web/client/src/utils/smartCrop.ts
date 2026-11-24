@@ -428,7 +428,7 @@ export function paintLedPreviewCanvas(
   }
 }
 
-export function uint8ToBase64(bytes: Uint8ClampedArray): string {
+export function uint8ToBase64(bytes: Uint8Array | Uint8ClampedArray): string {
   const chunkSize = 0x8000;
   const parts: string[] = [];
   for (let i = 0; i < bytes.length; i += chunkSize) {

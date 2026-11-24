@@ -3,6 +3,7 @@ import { api, ApiError } from '@/api/client';
 import type {
   ConfigSchemaMetadata,
   EffectMeta,
+  FontMeta,
   MatrixConfig,
 } from '@/types/matrix';
 
@@ -28,6 +29,7 @@ export function useMatrixConfig({
   });
   const [effects, setEffects] = useState<EffectMeta[]>([]);
   const [fonts, setFonts] = useState<string[]>([]);
+  const [fontCatalog, setFontCatalog] = useState<FontMeta[]>([]);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -54,6 +56,7 @@ export function useMatrixConfig({
       setSchema(cfgRes.schema);
       setEffects(fxRes.effects);
       setFonts(fxRes.fonts);
+      setFontCatalog(fxRes.fontCatalog ?? []);
       setFieldErrors({});
     } catch (err) {
       if (seq !== loadSeqRef.current) return;
@@ -158,6 +161,7 @@ export function useMatrixConfig({
       const fxRes = await api.effects.list();
       setEffects(fxRes.effects);
       setFonts(fxRes.fonts);
+      setFontCatalog(fxRes.fontCatalog ?? []);
     } catch (err) {
       onUnauthorized?.(err);
     }
@@ -177,6 +181,8 @@ export function useMatrixConfig({
     effects,
     effectMap,
     fonts,
+    fontCatalog,
+    setFontCatalog,
     loading,
     saving,
     loadError,
