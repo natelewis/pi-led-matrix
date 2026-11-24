@@ -26,9 +26,57 @@ To make a new effect, just copy an existing effect directory that might have som
 * effect_directory
 * effect (This is a dictionary containing what was passed as the effect JSON config whe loading the effect)
 
+### Declaring UI Controls (`CONFIG_SCHEMA`)
+
+Any effect can expose native controls in **LED Matrix Studio** (dropdowns, sliders, toggles, text inputs, and a standard color picker) by defining a top-level `CONFIG_SCHEMA` list of plain dicts inside `src/effects/<name>/effect.py`. Studio parses it safely via AST without importing the effect.
+
+Supported field types:
+
+| `type` | Studio Control | Supported Properties |
+| --- | --- | --- |
+| `"select"` | Dropdown | `key`, `label`, `options` (`[{"value", "label"}]` or `["a", "b"]`), `default`, `description`, `required` |
+| `"number"` | Slider (when `min` & `max` set) or numeric input | `key`, `label`, `default`, `min`, `max`, `step`, `integer`, `unit`, `description`, `required` |
+| `"boolean"` | Toggle switch | `key`, `label`, `default`, `description` |
+| `"color"` | Standard color picker (color wheel, hex `#rrggbb` input, RGB readout & vivid LED swatches) | `key`, `label`, `default` (`"#rrggbb"`), `description`, `required` |
+| `"text"` | Text input | `key`, `label`, `default`, `placeholder`, `description`, `required` |
+
+Use `"select"` when curated multi-color themes/palettes make sense (e.g., `hallway`, `snow_flakes`), and `"color"` whenever arbitrary user-picked colors make sense (e.g., `matrix`, `water_ripple`, text accents). Inside `run(matrix, config)`, convert hex color values cleanly with `matrix.parse_color(effect_cfg.get("color"), default_rgb)`:
+
+```python
+CONFIG_SCHEMA = [
+    {
+        "key": "color",
+        "label": "Primary Color",
+        "type": "color",
+        "default": "#00e5ff",
+        "description": "Any hex color picked in LED Matrix Studio.",
+    },
+    {
+        "key": "speed",
+        "label": "Speed",
+        "type": "number",
+        "default": 1.0,
+        "min": 0.2,
+        "max": 3.0,
+        "step": 0.1,
+        "unit": "×",
+    },
+]
+
+def run(matrix, config):
+    effect_cfg = config.get("effect") or {}
+    rgb = matrix.parse_color(effect_cfg.get("color"), (0, 229, 255))
+```
+
 ## hallway
 
-Effect of moving down a hallway.
+Immersive 3D curving neon hallway with perspective portal arches, recessed overhead light panels, glossy floor reflections, traveling energy pulses, drifting light motes, and atmospheric portal fog.
+
+Optional config keys: `theme` (`"auto"` [default], `"cyber"`, `"synthwave"`, `"crimson"`, `"gold"`, or `"emerald"`), `speed` (`0.2`–`3.0`), `curve` (`0.0`–`2.0`), `pulse` (`true`/`false`), and `motes` (`true`/`false`).
+
+```bash
+make run effect=hallway config='{"theme":"synthwave","speed":1.3,"curve":1.2}'
+```
 
 ## image image.png
 

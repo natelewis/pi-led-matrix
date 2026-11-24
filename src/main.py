@@ -307,6 +307,9 @@ class VirtualMatrix:
     def color(self, color_name):
         return led_color.COLOR_MAP[color_name]
 
+    def parse_color(self, value, default=(255, 255, 255)):
+        return led_color.parse_color(value, default)
+
     def random_color(self):
         return led_color.random_color()
 
@@ -435,6 +438,9 @@ class LiveMatrix:
 
     def color(self, color_name):
         return led_color.COLOR_MAP[color_name]
+
+    def parse_color(self, value, default=(255, 255, 255)):
+        return led_color.parse_color(value, default)
 
     def random_color(self):
         return led_color.random_color()

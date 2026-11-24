@@ -10,11 +10,49 @@ import {
   Terminal,
   Trash2,
 } from 'lucide-react';
-import { Badge, type BadgeTone } from '@/components/ui';
+import { Badge, normalizeHexColor, type BadgeTone } from '@/components/ui';
 import { PlaylistEntryLabel } from '@/components/config/PlaylistEntryLabel';
 import { buildEffectRunCommand } from '@/utils/cliCommand';
 import { extractMarqueeText } from '@/utils/playlistLabels';
-import type { EffectCategory, EffectMeta, PlaylistItem } from '@/types/matrix';
+import type {
+  EffectCategory,
+  EffectConfigField,
+  EffectMeta,
+  PlaylistItem,
+} from '@/types/matrix';
+
+interface ConfiguredFieldPart {
+  key: string;
+  text: string;
+  colorSwatch?: string;
+}
+
+function formatConfiguredFieldsSummary(
+  config: Record<string, unknown> | undefined,
+  fields: EffectConfigField[] | undefined
+): ConfiguredFieldPart[] {
+  if (!config || !fields || fields.length === 0) return [];
+  const parts: ConfiguredFieldPart[] = [];
+  for (const field of fields) {
+    if (!(field.key in config)) continue;
+    const raw = config[field.key];
+    if (field.type === 'select') {
+      const match = field.options?.find((opt) => opt.value === String(raw));
+      parts.push({ key: field.key, text: `${field.label}: ${match?.label ?? String(raw)}` });
+    } else if (field.type === 'boolean') {
+      parts.push({ key: field.key, text: `${field.label}: ${raw ? 'On' : 'Off'}` });
+    } else if (field.type === 'number' && typeof raw === 'number') {
+      const formatted = field.integer ? String(Math.round(raw)) : String(Number(raw.toFixed(2)));
+      parts.push({ key: field.key, text: `${field.label}: ${formatted}${field.unit ?? ''}` });
+    } else if (field.type === 'color' && typeof raw === 'string' && raw.trim() !== '') {
+      const hex = normalizeHexColor(raw);
+      parts.push({ key: field.key, text: `${field.label}: ${hex}`, colorSwatch: hex });
+    } else if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
+      parts.push({ key: field.key, text: `${field.label}: ${String(raw)}` });
+    }
+  }
+  return parts;
+}
 
 const CATEGORY_TONES: Record<EffectCategory, BadgeTone> = {
   animation: 'cyan',
@@ -71,8 +109,13 @@ export function PlaylistItemRow({
 }: PlaylistItemRowProps) {
   const [copied, setCopied] = useState(false);
   const hasConfig = Boolean(item.config && Object.keys(item.config).length > 0);
-  const needsConfig =
-    meta && meta.configSchema !== 'none' && !hasConfig;
+  const requiresConfig = Boolean(
+    meta &&
+      (meta.requiresConfig ??
+        (meta.configSchema !== 'none' && meta.configSchema !== 'fields'))
+  );
+  const needsConfig = requiresConfig && !hasConfig;
+  const fieldSummary = formatConfiguredFieldsSummary(item.config, meta?.configFields);
   const runCommand = buildEffectRunCommand(item);
   const marqueeText = extractMarqueeText(item);
   const configuredFile =
@@ -127,8 +170,8 @@ export function PlaylistItemRow({
             meta={meta}
             className="text-sm font-medium text-slate-100"
           />
-          {!hasCustomTitle && (
-            <span className="shrink-0 font-mono text-[11px] text-slate-500">
+          {!hasCustomTitle && !hasConfig && (
+            <span className="hidden shrink-0 font-mono text-[11px] text-slate-500 xl:inline">
               {item.effect}
             </span>
           )}
@@ -149,12 +192,32 @@ export function PlaylistItemRow({
             {needsConfig && <Badge tone="amber">Needs config</Badge>}
           </div>
         </div>
-        {(configuredFile || marqueeText || meta?.description) && (
+        {(configuredFile || marqueeText || fieldSummary.length > 0 || meta?.description) && (
           <p className="mt-0.5 truncate text-xs text-slate-400">
             {configuredFile ? (
-              <span className="font-mono text-[11px] text-slate-400">{configuredFile}</span>
+              <span className="font-mono text-[11px] text-slate-400">
+                {configuredFile}
+                {fieldSummary.length > 0
+                  ? ` · ${fieldSummary.map((p) => p.text).join(' · ')}`
+                  : ''}
+              </span>
             ) : marqueeText ? (
               `${marqueeLayerCount} ${marqueeLayerCount === 1 ? 'message layer' : 'message layers'}`
+            ) : fieldSummary.length > 0 ? (
+              <span className="inline-flex max-w-full items-center gap-1.5 overflow-hidden whitespace-nowrap text-cyan-200/80">
+                {fieldSummary.map((part, idx) => (
+                  <span key={part.key} className="inline-flex shrink-0 items-center gap-1">
+                    {idx > 0 && <span className="text-slate-600">·</span>}
+                    {part.colorSwatch && (
+                      <span
+                        className="inline-block h-2.5 w-2.5 rounded-full border border-white/30"
+                        style={{ backgroundColor: part.colorSwatch }}
+                      />
+                    )}
+                    <span>{part.text}</span>
+                  </span>
+                ))}
+              </span>
             ) : (
               meta?.description
             )}

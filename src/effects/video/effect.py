@@ -6,10 +6,22 @@ import cv2
 from PIL import Image
 
 DEFAULT_FPS = 30.0
-USAGE_TEXT = (
-    'Usage: make run effect=video config=\'{"file":"video-file.mp4"}\''
-)
+USAGE_TEXT = 'Usage: make run effect=video config=\'{"file":"video-file.mp4"}\''
 CHANNEL_INDEX = {"r": 0, "g": 1, "b": 2}
+
+CONFIG_SCHEMA = [
+    {
+        "key": "speed",
+        "label": "Playback Speed",
+        "type": "number",
+        "default": 1.0,
+        "min": 0.25,
+        "max": 4.0,
+        "step": 0.25,
+        "unit": "×",
+        "description": "Adjust video playback speed relative to its native frame rate.",
+    },
+]
 
 
 def _resolve_safe_video_path(effect_dir, raw_file):
@@ -20,7 +32,9 @@ def _resolve_safe_video_path(effect_dir, raw_file):
     try:
         candidate.relative_to(base_dir)
     except ValueError as exc:
-        raise ValueError("Video path must reside inside the video effect directory.") from exc
+        raise ValueError(
+            "Video path must reside inside the video effect directory."
+        ) from exc
     if not candidate.is_file():
         raise FileNotFoundError(f"Video file not found: {raw_file}")
     return candidate

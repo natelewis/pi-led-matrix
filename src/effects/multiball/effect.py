@@ -7,6 +7,20 @@
 from operator import itemgetter
 import random
 
+CONFIG_SCHEMA = [
+    {
+        "key": "balls",
+        "label": "Ball Count",
+        "type": "number",
+        "default": 0,
+        "min": 0,
+        "max": 150,
+        "step": 1,
+        "integer": True,
+        "description": "Number of bouncing balls (0 auto-scales to matrix size).",
+    },
+]
+
 
 def random_velocity(max_speed):
     """pick a non-zero velocity in [-max_speed, max_speed]"""
@@ -50,10 +64,22 @@ def run(matrix, config):
     )
 
     default_balls = max(8, round(width * height / 112))
-    try:
-        num_of_balls = int(config["argv"][0]) or default_balls
-    except (KeyError, IndexError, ValueError, TypeError):
-        num_of_balls = default_balls
+    effect_cfg = config.get("effect") or {}
+    num_of_balls = default_balls
+    if isinstance(effect_cfg, dict) and "balls" in effect_cfg:
+        raw_balls = effect_cfg["balls"]
+        if not isinstance(raw_balls, bool):
+            try:
+                parsed = int(raw_balls)
+                if parsed > 0:
+                    num_of_balls = min(150, parsed)
+            except (ValueError, TypeError):
+                pass
+    else:
+        try:
+            num_of_balls = min(150, max(1, int(config["argv"][0])))
+        except (KeyError, IndexError, ValueError, TypeError):
+            num_of_balls = default_balls
 
     max_speed = max(3, min(width, height) // 15)
     all_balls = [

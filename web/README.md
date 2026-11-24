@@ -102,5 +102,6 @@ web/
 
 ### Adding Future Features
 
-1. **Backend**: Register new endpoints on `router` inside `web/server/app.py`. All routes default to `require_auth=True`.
-2. **Frontend**: Add an entry to `NAV_ITEMS` in `web/client/src/components/layout/navItems.ts`, create a page component reusing primitives from `@/components/ui`, and render it in `App.tsx`.
+1. **Effect Options (`CONFIG_SCHEMA`)**: Declare a top-level `CONFIG_SCHEMA` list inside any `src/effects/<name>/effect.py` using `select`, `number`, `boolean`, `color`, or `text` fields — `web/server/effects.py` discovers it automatically and renders dropdowns, sliders, toggles, or the standard color picker in `EffectConfigModal` (see [src/effects/README.md](../src/effects/README.md#declaring-ui-controls-config_schema)).
+2. **Backend**: Register new endpoints on `router` inside `web/server/app.py`. All routes default to `require_auth=True`.
+3. **Frontend**: Add an entry to `NAV_ITEMS` in `web/client/src/components/layout/navItems.ts`, create a page component reusing primitives from `@/components/ui`, and render it in `App.tsx`.

@@ -118,6 +118,10 @@ export function PlaylistPage({
     });
   }, [effects, search, category]);
 
+  const isRequiredConfig = (fx: EffectMeta) =>
+    fx.requiresConfig ??
+    (fx.configSchema !== 'none' && fx.configSchema !== 'fields');
+
   const addEffect = (fx: EffectMeta) => {
     const nextItem: PlaylistItem = { effect: fx.id };
     const newIndex = config.playlist.length;
@@ -125,14 +129,14 @@ export function PlaylistPage({
       ...prev,
       playlist: [...prev.playlist, nextItem],
     }));
-    if (fx.configSchema !== 'none') {
+    if (isRequiredConfig(fx)) {
       setEditingIndex(newIndex);
     }
   };
 
   const addAllStandard = () => {
     const standard = effects
-      .filter((fx) => !fx.isUtility && fx.configSchema === 'none')
+      .filter((fx) => !fx.isUtility && !isRequiredConfig(fx))
       .map((fx) => ({ effect: fx.id }));
     onUpdateConfig((prev) => ({
       ...prev,
@@ -397,9 +401,11 @@ export function PlaylistPage({
                           {fx.label}
                         </span>
                         {count > 0 && <Badge tone="cyan">×{count}</Badge>}
-                        {fx.configSchema !== 'none' && (
+                        {isRequiredConfig(fx) ? (
                           <Badge tone="amber">configurable</Badge>
-                        )}
+                        ) : (fx.configFields?.length ?? 0) > 0 ? (
+                          <Badge tone="violet">options</Badge>
+                        ) : null}
                       </div>
                       <p className="mt-0.5 truncate text-xs text-slate-400">
                         {fx.description}

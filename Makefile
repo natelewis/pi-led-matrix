@@ -1,3 +1,5 @@
+.PHONY: run playlist off bootstrap clean lint lint-fix web-build web web-dev web-test
+
 UNAME_S := $(shell uname -s)
 IS_VIRTUAL := $(shell python3 -c "import json, os; f='config.json' if os.path.exists('config.json') else 'default_config.json'; print('1' if json.load(open(f)).get('virtual') or os.environ.get('VIRTUAL_MATRIX')=='1' else '')" 2>/dev/null)
 ifeq ($(UNAME_S),Linux)

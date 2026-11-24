@@ -1,3 +1,4 @@
+import math
 import random
 
 
@@ -30,6 +31,43 @@ def random_color():
         tuple: A tuple representing the RGB color, with values ranging from 0 to 255.
     """
     return (random.randrange(255), random.randrange(255), random.randrange(255))
+
+
+def parse_color(value, default=(255, 255, 255)):
+    """Parse a hex string ('#rrggbb' / '#rgb'), CSS color name, or RGB sequence."""
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in COLOR_MAP:
+            return COLOR_MAP[text]
+        hex_str = text[1:] if text.startswith("#") else text
+        if len(hex_str) == 3:
+            hex_str = "".join(ch * 2 for ch in hex_str)
+        if len(hex_str) == 6:
+            try:
+                return (
+                    int(hex_str[0:2], 16),
+                    int(hex_str[2:4], 16),
+                    int(hex_str[4:6], 16),
+                )
+            except ValueError:
+                return default
+        return default
+
+    if isinstance(value, (list, tuple)) and len(value) == 3:
+        channels = []
+        for c in value:
+            if isinstance(c, bool):
+                return default
+            try:
+                fval = float(c)
+                if not math.isfinite(fval):
+                    return default
+                channels.append(max(0, min(255, int(round(fval)))))
+            except (TypeError, ValueError, OverflowError):
+                return default
+        return tuple(channels)
+
+    return default
 
 
 COLOR_MAP = {
