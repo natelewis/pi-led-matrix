@@ -153,6 +153,16 @@ class VirtualMatrix:
         ):
             os.environ["DISPLAY"] = ":0"
 
+        # Prefer native Wayland over XWayland when WAYLAND_DISPLAY is present to avoid
+        # X11 RandR BadRROutput crashes on HDMI blanking/hotplug; fall back if unavailable.
+        auto_wayland = (
+            sys.platform.startswith("linux")
+            and bool(os.environ.get("WAYLAND_DISPLAY"))
+            and not os.environ.get("SDL_VIDEODRIVER")
+        )
+        if auto_wayland:
+            os.environ["SDL_VIDEODRIVER"] = "wayland"
+
         warnings.filterwarnings(
             "ignore", message=".*neon capable.*", category=RuntimeWarning
         )
@@ -160,6 +170,9 @@ class VirtualMatrix:
 
         self.pygame = pygame
         self.pygame.init()
+        if auto_wayland and not self.pygame.display.get_init():
+            os.environ.pop("SDL_VIDEODRIVER", None)
+            self.pygame.init()
 
         self.frame = []
         self.fullscreen = virtual_fullscreen
