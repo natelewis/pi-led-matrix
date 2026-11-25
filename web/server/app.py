@@ -25,9 +25,11 @@ from urllib.parse import parse_qs, urlparse
 from .auth import AuthManager
 from .config_store import ConfigStore, ConfigValidationError
 from .effects import discover_effects, discover_fonts
+from .fonts import FontStore
 from .git_ops import GitOperationError, GitRepoUpdater
 from .media import ImageMediaStore, VideoMediaStore
 from .playback import PlaybackController
+from .preview import render_effect_preview
 from .router import Router
 from .targets import RemoteRequestError, RemoteUnreachableError, TargetManager
 
@@ -68,6 +70,7 @@ class AppContext:
             targets_file if targets_file is not None else self.web_root / ".targets.json"
         )
         self.config_store = ConfigStore(self.repo_root)
+        self.font_store = FontStore(self.repo_root)
         self.media_store = ImageMediaStore(self.repo_root)
         self.video_store = VideoMediaStore(self.repo_root)
         self.playback = PlaybackController(self.repo_root)
@@ -220,12 +223,128 @@ class AppContext:
 
         @router.get("/api/effects", require_auth=True)
         def get_effects(req: MatrixRequestHandler, _params: Dict[str, str]) -> None:
+            font_catalog = self.font_store.list_fonts()
             req.send_json(
                 {
                     "effects": discover_effects(self.repo_root),
-                    "fonts": discover_fonts(self.repo_root),
+                    "fonts": [item["id"] for item in font_catalog],
+                    "fontCatalog": font_catalog,
                 }
             )
+
+        @router.post("/api/effects/:name/preview", require_auth=True)
+        def preview_effect(req: MatrixRequestHandler, params: Dict[str, str]) -> None:
+            effect_name = params.get("name", "")
+            body = req.read_json_body()
+            if body is None:
+                return
+            cfg_data = self.config_store.load()["config"]
+            raw_w = body.get("width", cfg_data.get("pixel_width", 128))
+            raw_h = body.get("height", cfg_data.get("pixel_height", 72))
+            try:
+                width = int(raw_w)
+                height = int(raw_h)
+            except (TypeError, ValueError):
+                req.send_json(
+                    {"error": "width and height must be integers."},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+                return
+            effect_cfg = body.get("config")
+            if effect_cfg is not None and not isinstance(effect_cfg, dict):
+                req.send_json(
+                    {"error": "config must be a JSON object."},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+                return
+            try:
+                payload = render_effect_preview(
+                    self.repo_root, effect_name, effect_cfg or {}, width, height
+                )
+            except ValueError as exc:
+                req.send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            except FileNotFoundError as exc:
+                req.send_json({"error": str(exc)}, status=HTTPStatus.NOT_FOUND)
+                return
+            except NotImplementedError as exc:
+                req.send_json(
+                    {"error": str(exc)}, status=HTTPStatus.NOT_IMPLEMENTED
+                )
+                return
+            except Exception as exc:  # pylint: disable=broad-exception-caught
+                req.send_json(
+                    {"error": f"Preview failed: {exc}"},
+                    status=HTTPStatus.UNPROCESSABLE_ENTITY,
+                )
+                return
+            req.send_json(payload)
+
+        @router.get("/api/fonts", require_auth=True)
+        def list_fonts(req: MatrixRequestHandler, _params: Dict[str, str]) -> None:
+            req.send_json({"fonts": self.font_store.list_fonts()})
+
+        @router.get("/api/fonts/file", require_auth=True)
+        def get_font_file(req: MatrixRequestHandler, _params: Dict[str, str]) -> None:
+            query = parse_qs(urlparse(req.path).query)
+            rel_file = (query.get("file") or [""])[0]
+            try:
+                target = self.font_store.resolve_font_path(rel_file)
+            except ValueError as exc:
+                req.send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            except FileNotFoundError as exc:
+                req.send_json({"error": str(exc)}, status=HTTPStatus.NOT_FOUND)
+                return
+            ext = target.suffix.lower()
+            content_type = "font/otf" if ext == ".otf" else "font/ttf"
+            data = target.read_bytes()
+            req.send_response(int(HTTPStatus.OK))
+            req._write_security_headers()
+            req.send_header("Content-Type", content_type)
+            req.send_header("Cache-Control", "private, max-age=86400")
+            req.send_header("Content-Length", str(len(data)))
+            req.end_headers()
+            req.wfile.write(data)
+
+        @router.post("/api/fonts/upload", require_auth=True)
+        def upload_font_file(req: MatrixRequestHandler, _params: Dict[str, str]) -> None:
+            body = req.read_json_body()
+            if body is None:
+                return
+            filename = str(body.get("filename", "custom.ttf"))
+            data_base64 = body.get("dataBase64")
+            if not isinstance(data_base64, str) or not data_base64:
+                req.send_json(
+                    {"error": "Missing dataBase64 payload."},
+                    status=HTTPStatus.BAD_REQUEST,
+                )
+                return
+            try:
+                saved = self.font_store.save_uploaded_font(filename, data_base64)
+            except ValueError as exc:
+                req.send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            req.send_json(
+                {"font": saved, "fonts": self.font_store.list_fonts()},
+                status=HTTPStatus.CREATED,
+            )
+
+        @router.delete("/api/fonts/file", require_auth=True)
+        def delete_font_file(req: MatrixRequestHandler, _params: Dict[str, str]) -> None:
+            query = parse_qs(urlparse(req.path).query)
+            rel_file = (query.get("file") or [""])[0]
+            try:
+                deleted = self.font_store.delete_uploaded_font(rel_file)
+            except ValueError as exc:
+                req.send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+                return
+            if not deleted:
+                req.send_json(
+                    {"error": "Uploaded font not found."}, status=HTTPStatus.NOT_FOUND
+                )
+                return
+            req.send_json({"deleted": rel_file, "fonts": self.font_store.list_fonts()})
 
         @router.get("/api/effects/image/files", require_auth=True)
         def list_image_files(req: MatrixRequestHandler, _params: Dict[str, str]) -> None:

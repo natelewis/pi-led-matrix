@@ -851,6 +851,82 @@ class WebServerTestCase(unittest.TestCase):
         finally:
             shutil.rmtree(sandbox, ignore_errors=True)
 
+    def test_fonts_api_and_generic_effect_preview(self):
+        _, headers, _ = self._request(
+            "POST", "/api/auth/setup", {"password": "secret-password"}
+        )
+        cookie = self._extract_cookie(headers)
+
+        # 1. GET /api/effects includes fontCatalog and marquee hasPreview + configPresets
+        status, _, fx_data = self._request("GET", "/api/effects", cookie=cookie)
+        self.assertEqual(status, 200)
+        self.assertGreaterEqual(len(fx_data.get("fontCatalog", [])), 10)
+        marquee = next(e for e in fx_data["effects"] if e["id"] == "marquee")
+        self.assertEqual(marquee["configSchema"], "fields")
+        self.assertTrue(marquee["hasPreview"])
+        self.assertGreaterEqual(len(marquee.get("configPresets", [])), 5)
+
+        # 2. GET /api/fonts and GET /api/fonts/file serve real font bytes
+        status, _, fonts_list = self._request("GET", "/api/fonts", cookie=cookie)
+        self.assertEqual(status, 200)
+        self.assertTrue(any(f["id"] == "dosis.ttf" for f in fonts_list["fonts"]))
+
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{self.port}/api/fonts/file?file=dosis.ttf",
+            headers={"Cookie": cookie},
+        )
+        with urllib.request.urlopen(req) as resp:
+            self.assertEqual(resp.status, 200)
+            self.assertEqual(resp.headers.get("Content-Type"), "font/ttf")
+            ttf_bytes = resp.read()
+            self.assertGreater(len(ttf_bytes), 4000)
+
+        # 3. Upload & delete custom font
+        b64_ttf = base64.b64encode(ttf_bytes).decode("ascii")
+        status, _, uploaded = self._request(
+            "POST",
+            "/api/fonts/upload",
+            {"filename": "custom_test.ttf", "dataBase64": b64_ttf},
+            cookie=cookie,
+        )
+        self.assertEqual(status, 201)
+        uploaded_id = uploaded["font"]["id"]
+        self.assertTrue(uploaded_id.startswith("_uploads/"))
+
+        status, _, deleted = self._request(
+            "DELETE",
+            f"/api/fonts/file?file={urllib.parse.quote(uploaded_id)}",
+            cookie=cookie,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(deleted["deleted"], uploaded_id)
+
+        # 4. Generic POST /api/effects/:name/preview renders marquee frames + diagnostics
+        status, _, preview_res = self._request(
+            "POST",
+            "/api/effects/marquee/preview",
+            {
+                "config": {"text": "HELLO\nWORLD", "font": "pixel_5x7", "mode": "auto"},
+                "width": 64,
+                "height": 32,
+            },
+            cookie=cookie,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(preview_res["width"], 64)
+        self.assertEqual(preview_res["height"], 32)
+        self.assertGreaterEqual(preview_res["frameCount"], 1)
+        self.assertTrue(len(preview_res["diagnostics"]) >= 1)
+
+        # 5. Effects without a preview() hook return 501 cleanly
+        status, _, _ = self._request(
+            "POST",
+            "/api/effects/warp/preview",
+            {"config": {}, "width": 64, "height": 32},
+            cookie=cookie,
+        )
+        self.assertEqual(status, 501)
+
 
 if __name__ == "__main__":
     unittest.main()

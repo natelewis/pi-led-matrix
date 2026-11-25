@@ -28,6 +28,7 @@ import { copyToClipboard } from '@/utils/cliCommand';
 import type {
   EffectCategory,
   EffectMeta,
+  FontMeta,
   MatrixConfig,
   PlaylistItem,
 } from '@/types/matrix';
@@ -37,6 +38,8 @@ interface PlaylistPageProps {
   effects: EffectMeta[];
   effectMap: Map<string, EffectMeta>;
   fonts: string[];
+  fontCatalog?: FontMeta[];
+  onFontsChanged?: (nextFonts: FontMeta[]) => void;
   fieldErrors: Record<string, string>;
   playingIndex: number | null;
   playbackBusy: boolean;
@@ -60,6 +63,8 @@ export function PlaylistPage({
   effects,
   effectMap,
   fonts,
+  fontCatalog = [],
+  onFontsChanged,
   fieldErrors,
   playingIndex,
   playbackBusy,
@@ -122,15 +127,17 @@ export function PlaylistPage({
     fx.requiresConfig ??
     (fx.configSchema !== 'none' && fx.configSchema !== 'fields');
 
+  const hasConfigurableOptions = (fx: EffectMeta) =>
+    fx.configSchema !== 'none' || (fx.configFields?.length ?? 0) > 0;
+
   const addEffect = (fx: EffectMeta) => {
     const nextItem: PlaylistItem = { effect: fx.id };
-    const newIndex = config.playlist.length;
     onUpdateConfig((prev) => ({
       ...prev,
-      playlist: [...prev.playlist, nextItem],
+      playlist: [nextItem, ...prev.playlist],
     }));
-    if (isRequiredConfig(fx)) {
-      setEditingIndex(newIndex);
+    if (hasConfigurableOptions(fx)) {
+      setEditingIndex(0);
     }
   };
 
@@ -437,6 +444,8 @@ export function PlaylistPage({
         item={editingItem}
         effectMeta={editingItem ? effectMap.get(editingItem.effect) : undefined}
         fonts={fonts}
+        fontCatalog={fontCatalog}
+        onFontsChanged={onFontsChanged}
         pixelWidth={config.pixel_width}
         pixelHeight={config.pixel_height}
         ledDots={config.virtual_led_dots}

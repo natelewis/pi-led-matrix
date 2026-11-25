@@ -337,6 +337,8 @@ function MatrixStudioApp() {
               effects={matrix.effects}
               effectMap={matrix.effectMap}
               fonts={matrix.fonts}
+              fontCatalog={matrix.fontCatalog}
+              onFontsChanged={matrix.setFontCatalog}
               fieldErrors={matrix.fieldErrors}
               playingIndex={
                 playback.status.running && playback.status.mode === 'playlist'

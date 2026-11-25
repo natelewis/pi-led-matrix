@@ -1,0 +1,156 @@
+{
+  "fonts": [
+    {
+      "id": "pixel_5x7",
+      "file": "pixel_5x7",
+      "name": "Pixel 5×7 (Built-in)",
+      "category": "pixel",
+      "description": "Razor-sharp 5×7 bitmap font designed for tiny LED displays and multi-line compact signs.",
+      "minHeight": 7,
+      "recommendedMinSize": 7,
+      "crispDefault": true,
+      "builtin": true,
+      "license": "Built-in"
+    },
+    {
+      "id": "silkscreen.ttf",
+      "file": "silkscreen.ttf",
+      "name": "Silkscreen",
+      "category": "pixel",
+      "description": "Crisp square pixel display face that stays razor sharp on small matrices.",
+      "minHeight": 8,
+      "recommendedMinSize": 8,
+      "crispDefault": true,
+      "license": "SIL OFL 1.1"
+    },
+    {
+      "id": "press_start_2p.ttf",
+      "file": "press_start_2p.ttf",
+      "name": "Press Start 2P",
+      "category": "pixel",
+      "description": "Classic 8-bit arcade cabinet bitmap lettering.",
+      "minHeight": 8,
+      "recommendedMinSize": 8,
+      "crispDefault": true,
+      "license": "SIL OFL 1.1"
+    },
+    {
+      "id": "vt323.ttf",
+      "file": "vt323.ttf",
+      "name": "VT323",
+      "category": "pixel",
+      "description": "Narrow retro CRT terminal pixel font — fits more words per line.",
+      "minHeight": 10,
+      "recommendedMinSize": 12,
+      "crispDefault": true,
+      "license": "SIL OFL 1.1"
+    },
+    {
+      "id": "dosis.ttf",
+      "file": "dosis.ttf",
+      "name": "Dosis",
+      "category": "sans",
+      "description": "Clean rounded geometric sans-serif (classic pi-led-matrix default).",
+      "minHeight": 12,
+      "recommendedMinSize": 14,
+      "crispDefault": false,
+      "license": "SIL OFL 1.1"
+    },
+    {
+      "id": "space_grotesk_bold.ttf",
+      "file": "space_grotesk_bold.ttf",
+      "name": "Space Grotesk Bold",
+      "category": "sans",
+      "description": "Modern bold geometric sans with strong stroke weight for bright LED legibility.",
+      "minHeight": 11,
+      "recommendedMinSize": 13,
+      "variation": "Bold",
+      "cssWeight": 700,
+      "crispDefault": false,
+      "license": "SIL OFL 1.1"
+    },
+    {
+      "id": "barlow_condensed_bold.ttf",
+      "file": "barlow_condensed_bold.ttf",
+      "name": "Barlow Condensed Bold",
+      "category": "condensed",
+      "description": "Compact condensed headline sans — fits significantly more text on narrow matrices.",
+      "minHeight": 11,
+      "recommendedMinSize": 13,
+      "crispDefault": false,
+      "license": "SIL OFL 1.1"
+    },
+    {
+      "id": "oswald_bold.ttf",
+      "file": "oswald_bold.ttf",
+      "name": "Oswald Bold",
+      "category": "condensed",
+      "description": "Tall, bold news-ticker and poster lettering with tight horizontal footprint.",
+      "minHeight": 12,
+      "recommendedMinSize": 14,
+      "variation": "Bold",
+      "cssWeight": 700,
+      "crispDefault": false,
+      "license": "SIL OFL 1.1"
+    },
+    {
+      "id": "share_tech_mono.ttf",
+      "file": "share_tech_mono.ttf",
+      "name": "Share Tech Mono",
+      "category": "mono",
+      "description": "Futuristic tabular monospace ideal for clocks, countdowns, and scoreboards.",
+      "minHeight": 10,
+      "recommendedMinSize": 12,
+      "crispDefault": false,
+      "license": "SIL OFL 1.1"
+    },
+    {
+      "id": "jetbrains_mono_bold.ttf",
+      "file": "jetbrains_mono_bold.ttf",
+      "name": "JetBrains Mono Bold",
+      "category": "mono",
+      "description": "High-contrast developer monospace with crisp tabular digits.",
+      "minHeight": 10,
+      "recommendedMinSize": 12,
+      "variation": "Bold",
+      "cssWeight": 700,
+      "crispDefault": false,
+      "license": "SIL OFL 1.1"
+    },
+    {
+      "id": "bungee.ttf",
+      "file": "bungee.ttf",
+      "name": "Bungee",
+      "category": "display",
+      "description": "Bold urban signage typeface crafted specifically for marquee banners and hero titles.",
+      "minHeight": 14,
+      "recommendedMinSize": 16,
+      "crispDefault": false,
+      "license": "SIL OFL 1.1"
+    },
+    {
+      "id": "orbitron_bold.ttf",
+      "file": "orbitron_bold.ttf",
+      "name": "Orbitron Bold",
+      "category": "display",
+      "description": "Wide geometric sci-fi display lettering for cyber and neon themes.",
+      "minHeight": 13,
+      "recommendedMinSize": 15,
+      "variation": "Bold",
+      "cssWeight": 700,
+      "crispDefault": false,
+      "license": "SIL OFL 1.1"
+    },
+    {
+      "id": "pacifico.ttf",
+      "file": "pacifico.ttf",
+      "name": "Pacifico",
+      "category": "display",
+      "description": "Warm neon brush script — shines on standard and large LED matrices.",
+      "minHeight": 20,
+      "recommendedMinSize": 22,
+      "crispDefault": false,
+      "license": "SIL OFL 1.1"
+    }
+  ]
+}
