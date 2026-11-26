@@ -21,6 +21,7 @@ EFFECT_CATEGORIES: Dict[str, str] = {
     "jewels": "animation",
     "marquee": "text",
     "matrix": "animation",
+    "mightnight_fireworks": "animation",
     "multiball": "animation",
     "off": "utility",
     "pacman": "game",
