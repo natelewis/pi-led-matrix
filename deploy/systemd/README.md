@@ -66,6 +66,7 @@ RestartSec=3
 Environment=PYTHONUNBUFFERED=1
 Environment=XDG_RUNTIME_DIR=/run/user/1000
 Environment=WAYLAND_DISPLAY=wayland-1
+Environment=SDL_VIDEODRIVER=wayland
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=/home/nlewis/.Xauthority
 EnvironmentFile=/etc/pi-led-matrix-web.env
@@ -74,4 +75,4 @@ EnvironmentFile=/etc/pi-led-matrix-web.env
 WantedBy=multi-user.target
 ```
 
-> **Tip:** Check `ls /run/user/$(id -u)/wayland*` on your Pi to confirm whether Wayfire/labwc is using `wayland-0` or `wayland-1`, and ensure `/etc/pi-led-matrix-web.env` and `_runtime/` are owned by your desktop user.
+> **Tip:** Check `ls /run/user/$(id -u)/wayland*` on your Pi to confirm whether Wayfire/labwc is using `wayland-0` or `wayland-1`, and ensure `/etc/pi-led-matrix-web.env` and `_runtime/` are owned by your desktop user. Setting `SDL_VIDEODRIVER=wayland` (also auto-selected when `WAYLAND_DISPLAY` is set) avoids XWayland `BadRROutput` RandR crashes during HDMI sleep/hotplug; you should also disable Pi screen blanking (`sudo raspi-config nonint do_blanking 1` and reboot) so the display stays awake.
